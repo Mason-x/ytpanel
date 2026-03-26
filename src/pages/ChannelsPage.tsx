@@ -93,7 +93,7 @@ export default function ChannelsPage() {
       const response = await api.getChannels({ platform: 'youtube', limit: 1000, sort: 'recent' })
       setChannels(response.data)
     } catch (error) {
-      setErrorText(error instanceof Error ? error.message : '棰戦亾鍔犺浇澶辫触')
+      setErrorText(error instanceof Error ? error.message : '频道加载失败')
     } finally {
       if (!silent) setChannelsLoading(false)
     }
@@ -111,7 +111,7 @@ export default function ChannelsPage() {
       })
       setVideos(response.data)
     } catch (error) {
-      setErrorText(error instanceof Error ? error.message : '瑙嗛鍔犺浇澶辫触')
+      setErrorText(error instanceof Error ? error.message : '视频加载失败')
     } finally {
       if (!silent) setVideosLoading(false)
     }
@@ -129,7 +129,7 @@ export default function ChannelsPage() {
       setAnalyticsDailyRows(daily.data)
       setAnalyticsVideos(videosRes.data)
     } catch (error) {
-      setErrorText(error instanceof Error ? error.message : '鏁版嵁娲炲療鍔犺浇澶辫触')
+      setErrorText(error instanceof Error ? error.message : '数据洞察加载失败')
     } finally {
       if (!silent) setAnalyticsLoading(false)
     }
@@ -151,7 +151,7 @@ export default function ChannelsPage() {
 
   const visibleTagOptions = useMemo(() => {
     const keyword = tagSearch.trim().toLowerCase()
-    const base = [{ value: ALL_TAG, label: '鍏ㄩ儴', count: channels.length }, ...tagStats.map((item) => ({ value: item.tag, label: item.tag, count: item.count }))]
+    const base = [{ value: ALL_TAG, label: '全部', count: channels.length }, ...tagStats.map((item) => ({ value: item.tag, label: item.tag, count: item.count }))]
     return keyword ? base.filter((item) => item.value === ALL_TAG || item.label.toLowerCase().includes(keyword)) : base
   }, [channels.length, tagSearch, tagStats])
 
@@ -330,7 +330,7 @@ export default function ChannelsPage() {
 
   const submitAddChannel = async () => {
     if (!addInput.trim()) {
-      setAddError('璇疯緭鍏?YouTube 棰戦亾閾炬帴銆丂Handle 鎴?Channel ID')
+      setAddError('请输入 YouTube 频道链接、@Handle 或 Channel ID')
       return
     }
     setAdding(true)
@@ -363,7 +363,7 @@ export default function ChannelsPage() {
       setChannels(next)
       if (channel?.channel_id === targetId) navigate(next[0] ? `/channels/${encodeURIComponent(next[0].channel_id)}` : '/channels', { replace: true })
     } catch (error) {
-      setErrorText(error instanceof Error ? error.message : '鍒犻櫎棰戦亾澶辫触')
+      setErrorText(error instanceof Error ? error.message : '删除频道失败')
     }
   }
 
@@ -375,7 +375,7 @@ export default function ChannelsPage() {
       setShowTagEdit(false)
       setTagEditError('')
     } catch (error) {
-      setTagEditError(error instanceof Error ? error.message : '淇濆瓨鏍囩澶辫触')
+      setTagEditError(error instanceof Error ? error.message : '保存标签失败')
     }
   }
 
@@ -396,7 +396,7 @@ export default function ChannelsPage() {
     try {
       await navigator.clipboard.writeText(resolveVideoUrl(video))
     } catch {
-      setErrorText('瑙嗛閾炬帴澶嶅埗澶辫触')
+      setErrorText('视频链接复制失败')
     }
   }
 
@@ -409,7 +409,7 @@ export default function ChannelsPage() {
       setCopiedSelectedVideoLinks(true)
       window.setTimeout(() => setCopiedSelectedVideoLinks(false), 1600)
     } catch {
-      setErrorText('澶嶅埗閫変腑閾炬帴澶辫触')
+      setErrorText('复制选中链接失败')
     } finally {
       setCopyingSelectedVideoLinks(false)
     }
@@ -422,7 +422,7 @@ export default function ChannelsPage() {
       setExportedChannelLinks(true)
       window.setTimeout(() => setExportedChannelLinks(false), 1600)
     } catch {
-      setErrorText('棰戦亾閾炬帴澶嶅埗澶辫触')
+      setErrorText('频道链接复制失败')
     } finally {
       setExportingChannelLinks(false)
     }
@@ -471,8 +471,8 @@ export default function ChannelsPage() {
         {emptySidebar}
         <div className="card-flat" style={{ flex: 1, minHeight: 360, display: 'grid', placeItems: 'center' }}>
           <div className="empty-state">
-            <div className="empty-state-title">娌℃湁鍙睍绀虹殑棰戦亾</div>
-            鍘诲乏渚ф坊鍔犱竴涓?YouTube 棰戦亾銆?          </div>
+            <div className="empty-state-title">没有可展示的频道</div>
+            去左侧添加一个 YouTube 频道。          </div>
         </div>
         <AddChannelModal open={showAddModal} value={addInput} errorText={addError} adding={adding} onChange={setAddInput} onClose={() => setShowAddModal(false)} onSubmit={() => void submitAddChannel()} />
       </div>
@@ -654,19 +654,19 @@ export default function ChannelsPage() {
                   <div className="card-flat">
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
                       <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowInsightDescription((prev) => !prev)}>
-                        {showInsightDescription ? '闅愯棌鎻忚堪' : '鏄剧ず鎻忚堪'}
+                        {showInsightDescription ? '隐藏描述' : '显示描述'}
                       </button>
                     </div>
                     <div className="table-container">
                       <table>
                         <thead>
                           <tr>
-                            <th>鏍囬</th>
-                            {showInsightDescription && <th>鎻忚堪</th>}
-                            <th>鍙戝竷鏃堕棿</th>
-                            <th>鎾斁</th>
-                            <th>鐐硅禐</th>
-                            <th>璇勮</th>
+                            <th>标题</th>
+                            {showInsightDescription && <th>描述</th>}
+                            <th>发布时间</th>
+                            <th>播放</th>
+                            <th>点赞</th>
+                            <th>评论</th>
                           </tr>
                         </thead>
                         <tbody>

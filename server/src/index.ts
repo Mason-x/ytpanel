@@ -72,6 +72,12 @@ app.use('/api/hits', hitsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/agent', agentRoutes);
 
+const frontendDist = path.join(process.cwd(), 'dist');
+app.use(express.static(frontendDist));
+app.get(/^\/(?!api|assets).*/, (_req, res) => {
+  res.sendFile(path.join(frontendDist, 'index.html'));
+});
+
 // Error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[ERROR]', err);

@@ -3,6 +3,7 @@ export interface AppSettingsResponse {
   youtube_api_key_masked_preview?: string
   youtube_api_keys?: string
   youtube_api_key_proxies?: string
+  yt_dlp_cookie_file_youtube?: string
   download_root?: string
   daily_sync_time?: string
   sync_job_concurrency?: string

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import { buildSettingsPayload, clampConcurrency, deriveSettingsFormState } from '../lib/settingsForm'
 import type { AppSettingsResponse, YoutubeApiUsage } from '../types'
 
 function maskApiKey(value: string) {
@@ -9,18 +10,17 @@ function maskApiKey(value: string) {
   return `${trimmed.slice(0, 3)}***${trimmed.slice(-4)}`
 }
 
-function clampConcurrency(value: string) {
-  const next = Math.trunc(Number(value) || 0)
-  if (!Number.isFinite(next) || next < 1) return '1'
-  if (next > 16) return '16'
-  return String(next)
-}
+const MASKED_COOKIE_TEXT = '[已保存 YouTube Cookie，点击或聚焦后重新输入以覆盖]'
 
 export default function SettingsPage() {
   const [apiKey, setApiKey] = useState('')
   const [maskedApiKey, setMaskedApiKey] = useState('')
   const [hasSavedKey, setHasSavedKey] = useState(false)
   const [showMaskedValue, setShowMaskedValue] = useState(false)
+  const [youtubeCookie, setYoutubeCookie] = useState('')
+  const [maskedYoutubeCookie, setMaskedYoutubeCookie] = useState('')
+  const [hasSavedYoutubeCookie, setHasSavedYoutubeCookie] = useState(false)
+  const [showMaskedYoutubeCookie, setShowMaskedYoutubeCookie] = useState(false)
   const [dailySyncTime, setDailySyncTime] = useState('03:00')
   const [syncConcurrency, setSyncConcurrency] = useState('2')
   const [downloadConcurrency, setDownloadConcurrency] = useState('2')
@@ -41,15 +41,17 @@ export default function SettingsPage() {
 
         if (cancelled) return
 
-        const savedToken = String(settings.youtube_api_key || '').trim()
-        const hasKey = Boolean(savedToken)
+        const nextState = deriveSettingsFormState(settings)
 
-        setHasSavedKey(hasKey)
-        setShowMaskedValue(hasKey)
-        setMaskedApiKey(String(settings.youtube_api_key_masked_preview || '').trim() || (hasKey ? maskApiKey(savedToken) : ''))
-        setDailySyncTime(String(settings.daily_sync_time || '03:00').trim() || '03:00')
-        setSyncConcurrency(clampConcurrency(String(settings.sync_job_concurrency || '2')))
-        setDownloadConcurrency(clampConcurrency(String(settings.download_job_concurrency || '2')))
+        setHasSavedKey(nextState.hasSavedKey)
+        setShowMaskedValue(nextState.showMaskedValue)
+        setMaskedApiKey(nextState.maskedApiKey || (nextState.hasSavedKey ? maskApiKey(String(settings.youtube_api_key || '').trim()) : ''))
+        setHasSavedYoutubeCookie(nextState.hasSavedCookie)
+        setShowMaskedYoutubeCookie(nextState.showMaskedCookieValue)
+        setMaskedYoutubeCookie(nextState.maskedCookieValue)
+        setDailySyncTime(nextState.dailySyncTime)
+        setSyncConcurrency(nextState.syncConcurrency)
+        setDownloadConcurrency(nextState.downloadConcurrency)
         setUsage(usageData)
       } catch (error) {
         if (cancelled) return
@@ -71,13 +73,19 @@ export default function SettingsPage() {
     setErrorText('')
   }
 
+  const handleRevealYoutubeCookieInput = () => {
+    if (!showMaskedYoutubeCookie) return
+    setShowMaskedYoutubeCookie(false)
+    setYoutubeCookie('')
+    setErrorText('')
+  }
+
   const handleSave = async () => {
-    const nextApiKey = apiKey.trim()
     const nextSyncTime = String(dailySyncTime || '').trim()
     const nextSyncConcurrency = clampConcurrency(syncConcurrency)
     const nextDownloadConcurrency = clampConcurrency(downloadConcurrency)
 
-    if (!showMaskedValue && !nextApiKey && !hasSavedKey) {
+    if (!showMaskedValue && !apiKey.trim() && !hasSavedKey) {
       setErrorText('请输入 YouTube API Key')
       return
     }
@@ -90,24 +98,30 @@ export default function SettingsPage() {
     setSaving(true)
     setErrorText('')
 
-    const payload: Partial<AppSettingsResponse> = {
-      daily_sync_time: nextSyncTime,
-      sync_job_concurrency: nextSyncConcurrency,
-      download_job_concurrency: nextDownloadConcurrency,
-    }
-    if (!showMaskedValue || nextApiKey) {
-      payload.youtube_api_key = nextApiKey
-    }
+    const payload: Partial<AppSettingsResponse> = buildSettingsPayload({
+      hasSavedKey,
+      showMaskedValue,
+      apiKey,
+      dailySyncTime: nextSyncTime,
+      syncConcurrency: nextSyncConcurrency,
+      downloadConcurrency: nextDownloadConcurrency,
+      hasSavedCookie: hasSavedYoutubeCookie,
+      showMaskedCookieValue: showMaskedYoutubeCookie,
+      cookieValue: youtubeCookie,
+    })
 
     try {
       const settings = await api.updateSettings(payload)
-      const savedToken = String(settings.youtube_api_key || '').trim()
-      const hasKey = Boolean(savedToken)
+      const nextState = deriveSettingsFormState(settings)
 
-      setHasSavedKey(hasKey)
-      setShowMaskedValue(hasKey)
-      setMaskedApiKey(String(settings.youtube_api_key_masked_preview || '').trim() || (hasKey ? maskApiKey(savedToken) : ''))
+      setHasSavedKey(nextState.hasSavedKey)
+      setShowMaskedValue(nextState.showMaskedValue)
+      setMaskedApiKey(nextState.maskedApiKey || (nextState.hasSavedKey ? maskApiKey(String(settings.youtube_api_key || '').trim()) : ''))
       setApiKey('')
+      setHasSavedYoutubeCookie(nextState.hasSavedCookie)
+      setShowMaskedYoutubeCookie(nextState.showMaskedCookieValue)
+      setMaskedYoutubeCookie(nextState.maskedCookieValue)
+      setYoutubeCookie('')
       setDailySyncTime(String(settings.daily_sync_time || nextSyncTime))
       setSyncConcurrency(clampConcurrency(String(settings.sync_job_concurrency || nextSyncConcurrency)))
       setDownloadConcurrency(clampConcurrency(String(settings.download_job_concurrency || nextDownloadConcurrency)))
@@ -160,6 +174,25 @@ export default function SettingsPage() {
                   placeholder="AIza..."
                 />
                 <span className="form-help">建议使用只开放 YouTube Data API v3 的受限 Key。</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">yt-dlp YouTube Cookie</label>
+                <textarea
+                  className="input"
+                  rows={6}
+                  value={showMaskedYoutubeCookie ? MASKED_COOKIE_TEXT : youtubeCookie}
+                  onFocus={handleRevealYoutubeCookieInput}
+                  onClick={handleRevealYoutubeCookieInput}
+                  onChange={(event) => {
+                    setShowMaskedYoutubeCookie(false)
+                    setYoutubeCookie(event.target.value)
+                    setErrorText('')
+                  }}
+                  placeholder={'支持直接粘贴 Cookie Header、Netscape Cookie、JSON 或本地文件路径'}
+                  readOnly={showMaskedYoutubeCookie}
+                />
+                <span className="form-help">频道元数据、封面和部分受限内容拉取依赖这里的 YouTube Cookie。留空表示清空已保存配置。</span>
               </div>
             </div>
           </div>
@@ -230,12 +263,13 @@ export default function SettingsPage() {
             <div className="settings-side-title">状态栏说明</div>
             <ul className="settings-tip-list">
               <li>{hasSavedKey ? '已检测到后端保存的 API Key。' : '当前还没有保存 API Key。'}</li>
+              <li>{hasSavedYoutubeCookie ? '已检测到后端保存的 YouTube Cookie。' : '当前还没有保存 YouTube Cookie。'}</li>
               <li>{usage ? `顶部 API 配额会显示为 ${usage.used_units} / ${usage.daily_limit}。` : '顶部 API 配额状态暂未获取。'}</li>
               <li>{`每日同步会在每天 ${dailySyncTime || '03:00'} 自动入队。`}</li>
               <li>{`同步任务并发当前为 ${syncConcurrency}。`}</li>
               <li>{`下载任务并发当前为 ${downloadConcurrency}。`}</li>
               <li>导航栏右侧的“执行每日同步”会立即入队一次每日同步任务。</li>
-              <li>频道页的数据拉取、元数据下载和洞察分析都依赖这里的 API 与并发配置。</li>
+              <li>频道页的数据拉取、元数据下载和洞察分析都依赖这里的 API、Cookie 与并发配置。</li>
             </ul>
           </div>
         </aside>
