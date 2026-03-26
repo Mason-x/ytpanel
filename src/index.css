@@ -127,6 +127,9 @@ textarea {
   margin: 0 auto;
   width: 100%;
   padding: var(--space-lg);
+  height: calc(100dvh - 56px - 2 * var(--space-lg));
+  min-height: 0;
+  overflow: hidden;
 }
 
 .main-content {
@@ -136,6 +139,11 @@ textarea {
   max-width: 100%;
   margin: 0;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .navbar {
@@ -253,6 +261,7 @@ textarea {
   flex-shrink: 0;
   overflow: hidden;
   min-height: 0;
+  height: 100%;
 }
 
 .sidebar.sidebar-youtube {
@@ -330,6 +339,7 @@ textarea {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  height: 100%;
 }
 
 .sidebar-tag-panel {
@@ -828,6 +838,7 @@ tr:hover td {
   gap: var(--space-lg);
   height: 100%;
   overflow: hidden;
+  min-height: 0;
 }
 
 .channel-main-column {
@@ -836,6 +847,8 @@ tr:hover td {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
+  height: 100%;
 }
 
 .channel-header-layout {
@@ -1806,6 +1819,18 @@ tr:hover td {
     align-items: flex-start;
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .main-container,
+  .main-content {
+    height: auto;
+    overflow: visible;
+  }
+
+  .sidebar,
+  .sidebar-dual-layout,
+  .channel-main-column {
+    height: auto;
   }
 }
 
