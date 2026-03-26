@@ -127,8 +127,6 @@ textarea {
   margin: 0 auto;
   width: 100%;
   padding: var(--space-lg);
-  min-height: 0;
-  overflow: hidden;
 }
 
 .main-content {
@@ -138,10 +136,17 @@ textarea {
   max-width: 100%;
   margin: 0;
   width: 100%;
-  display: flex;
-  flex-direction: column;
+}
+
+.main-container:has(.channel-page-shell) {
+  height: calc(100dvh - 56px);
   min-height: 0;
+}
+
+.main-content:has(.channel-page-shell) {
+  height: 100%;
   overflow: hidden;
+  min-height: 0;
 }
 
 .navbar {
@@ -258,12 +263,14 @@ textarea {
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
+  height: 100%;
   min-height: 0;
 }
 
 .sidebar.sidebar-youtube {
   width: 380px;
   background: var(--bg-card);
+  height: 100%;
 }
 
 .sidebar-header {
@@ -335,21 +342,8 @@ textarea {
   display: flex;
   flex: 1;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
-}
-
-@media (min-width: 901px) {
-  .main-container {
-    height: calc(100dvh - 56px - 2 * var(--space-lg));
-  }
-
-  .main-content,
-  .channel-page-shell,
-  .channel-main-column,
-  .sidebar,
-  .sidebar-dual-layout {
-    height: 100%;
-  }
 }
 
 .sidebar-tag-panel {
@@ -365,6 +359,7 @@ textarea {
 .sidebar-tag-search-wrap {
   padding: var(--space-md);
   border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
 .sidebar-tag-search {
@@ -376,6 +371,7 @@ textarea {
   flex: 1;
   overflow-y: scroll;
   overflow-x: hidden;
+  min-height: 0;
   padding: 6px 6px 10px;
   display: flex;
   flex-direction: column;
@@ -439,12 +435,17 @@ textarea {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar-channel-list {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
   padding: 8px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .sidebar-tag-list::-webkit-scrollbar,
@@ -573,11 +574,13 @@ textarea {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .sidebar-channel-search-box {
   padding: var(--space-md);
   border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
 .sidebar-add-btn {
@@ -846,8 +849,9 @@ tr:hover td {
 .channel-page-shell {
   display: flex;
   gap: var(--space-lg);
-  overflow: hidden;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .channel-main-column {
@@ -999,6 +1003,8 @@ tr:hover td {
   overflow-y: auto;
   padding-right: 12px;
   min-height: 0;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .video-list-toolbar {
@@ -1765,8 +1771,15 @@ tr:hover td {
 }
 
 @media (max-width: 900px) {
-  .main-content {
+  .main-container:has(.channel-page-shell) {
+    height: auto;
+    min-height: 0;
+  }
+
+  .main-content:has(.channel-page-shell) {
+    height: auto;
     padding: 0;
+    overflow: visible;
   }
 
   .navbar {
@@ -1816,6 +1829,7 @@ tr:hover td {
   .channel-page-shell {
     flex-direction: column;
     height: auto;
+    min-height: auto;
   }
 
   .channel-header-layout {
@@ -1827,18 +1841,6 @@ tr:hover td {
     align-items: flex-start;
     justify-content: flex-start;
     flex-wrap: wrap;
-  }
-
-  .main-container,
-  .main-content {
-    height: auto;
-    overflow: visible;
-  }
-
-  .sidebar,
-  .sidebar-dual-layout,
-  .channel-main-column {
-    height: auto;
   }
 }
 
