@@ -1,5 +1,5 @@
 import type { ApiChannel } from '../../types'
-import { formatNum, parseTagsJson } from '../../lib/channelHelpers'
+import { formatNum } from '../../lib/channelHelpers'
 
 export default function ChannelSidebar({
   channels,
@@ -108,14 +108,6 @@ export default function ChannelSidebar({
                     <div className="sidebar-item-subtitle" style={{ fontSize: '0.78rem', marginTop: 2 }}>
                       {formatNum(item.subscriber_count)} 订阅 · {formatNum(item.video_count)} 视频
                     </div>
-                    {parseTagsJson(item.tags_json).length > 0 && (
-                      <div className="sidebar-status-text">
-                        {parseTagsJson(item.tags_json)
-                          .slice(0, 2)
-                          .map((tag) => `#${tag}`)
-                          .join('  ')}
-                      </div>
-                    )}
                   </div>
 
                   {managingChannels && (
