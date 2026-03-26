@@ -127,7 +127,6 @@ textarea {
   margin: 0 auto;
   width: 100%;
   padding: var(--space-lg);
-  height: calc(100dvh - 56px - 2 * var(--space-lg));
   min-height: 0;
   overflow: hidden;
 }
@@ -141,7 +140,6 @@ textarea {
   width: 100%;
   display: flex;
   flex-direction: column;
-  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
@@ -261,7 +259,6 @@ textarea {
   flex-shrink: 0;
   overflow: hidden;
   min-height: 0;
-  height: 100%;
 }
 
 .sidebar.sidebar-youtube {
@@ -339,7 +336,20 @@ textarea {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  height: 100%;
+}
+
+@media (min-width: 901px) {
+  .main-container {
+    height: calc(100dvh - 56px - 2 * var(--space-lg));
+  }
+
+  .main-content,
+  .channel-page-shell,
+  .channel-main-column,
+  .sidebar,
+  .sidebar-dual-layout {
+    height: 100%;
+  }
 }
 
 .sidebar-tag-panel {
@@ -836,7 +846,6 @@ tr:hover td {
 .channel-page-shell {
   display: flex;
   gap: var(--space-lg);
-  height: 100%;
   overflow: hidden;
   min-height: 0;
 }
@@ -848,7 +857,6 @@ tr:hover td {
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
-  height: 100%;
 }
 
 .channel-header-layout {
