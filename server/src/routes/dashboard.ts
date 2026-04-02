@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb, getSetting } from '../db.js';
+import { buildDueChannelAutoTasks } from './dashboardAutoTasks.js';
 
 const router = Router();
 
@@ -215,17 +216,6 @@ router.get('/', (req: Request, res: Response) => {
     ORDER BY c.title COLLATE NOCASE ASC
   `).all() as any[];
 
-  const taskRows = db.prepare(`
-    SELECT *
-    FROM dashboard_tasks
-    WHERE due_date = ?
-    ORDER BY
-      CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END ASC,
-      CASE status WHEN 'in_progress' THEN 0 WHEN 'todo' THEN 1 WHEN 'delayed' THEN 2 ELSE 3 END ASC,
-      sort_order ASC,
-      created_at ASC
-  `).all(date) as any[];
-
   const recentFailedSyncs = db.prepare(`
     SELECT job_id, type, status, created_at, error_message, payload_json
     FROM jobs
@@ -279,6 +269,43 @@ router.get('/', (req: Request, res: Response) => {
   const activeChannels = normalizedChannels.filter((item) => item.workflow_status === 'in_progress').length;
   const dueTodayCount = normalizedChannels.filter((item) => item.due_today).length;
   const updatedTodayCount = normalizedChannels.filter((item) => item.updated_today).length;
+  const existingTaskRows = db.prepare(`
+    SELECT *
+    FROM dashboard_tasks
+    WHERE due_date = ?
+  `).all(date) as any[];
+  const autoTasks = buildDueChannelAutoTasks(normalizedChannels, existingTaskRows, date);
+  for (const task of autoTasks) {
+    db.prepare(`
+      INSERT INTO dashboard_tasks (
+        task_id, title, task_name, channel_id, due_date, priority, status, estimate_minutes, planned_start_time, planned_end_time, notes, sort_order, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(
+      uuidv4(),
+      task.title,
+      task.task_name,
+      task.channel_id,
+      task.due_date,
+      task.priority,
+      task.status,
+      null,
+      task.planned_start_time,
+      task.planned_end_time,
+      task.notes,
+      task.sort_order,
+    );
+  }
+
+  const taskRows = db.prepare(`
+    SELECT *
+    FROM dashboard_tasks
+    WHERE due_date = ?
+    ORDER BY
+      CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END ASC,
+      CASE status WHEN 'in_progress' THEN 0 WHEN 'todo' THEN 1 WHEN 'delayed' THEN 2 ELSE 3 END ASC,
+      sort_order ASC,
+      created_at ASC
+  `).all(date) as any[];
   const totalTasks = taskRows.length;
   const completedTasks = taskRows.filter((item) => item.status === 'done').length;
   const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;

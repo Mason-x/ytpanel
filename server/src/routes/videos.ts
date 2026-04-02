@@ -2,6 +2,7 @@
 import { getDb, getSetting } from '../db.js';
 import fs from 'fs';
 import path from 'path';
+import { resolveVideoAvailabilityFilter } from './videoAvailabilityFilter.js';
 
 const router = Router();
 const WEEKDAY_LABELS = ['\u5468\u65e5', '\u5468\u4e00', '\u5468\u4e8c', '\u5468\u4e09', '\u5468\u56db', '\u5468\u4e94', '\u5468\u516d'];
@@ -608,6 +609,7 @@ router.get('/', (req: Request, res: Response) => {
   const db = getDb();
   const assetsRoot = resolveAssetsRootPath();
   const { channel_id, platform, tag, channel_tag, type, availability, download, q, sort, page = '1', limit = '48', favorite, recent_days } = req.query;
+  const effectiveAvailability = resolveVideoAvailabilityFilter(availability, sort);
   const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
   const limitNum = Math.min(200, parseInt(limit as string, 10) || 48);
   const offset = (pageNum - 1) * limitNum;
@@ -721,9 +723,9 @@ router.get('/', (req: Request, res: Response) => {
     where += ' AND lower(COALESCE(v.content_type, \'\')) = ?';
     params.push(normalizedType);
   }
-  if (availability) {
+  if (effectiveAvailability) {
     where += ' AND v.availability_status = ?';
-    params.push(availability);
+    params.push(effectiveAvailability);
   }
   if (download && download !== 'any') {
     where += ' AND v.download_status = ?';
@@ -915,4 +917,3 @@ router.patch('/:id', (req: Request, res: Response) => {
 });
 
 export default router;
-

@@ -1119,6 +1119,10 @@ tr:hover td {
   cursor: pointer;
 }
 
+.video-card.video-card-description-open {
+  z-index: 4;
+}
+
 .video-card.video-card-is-live {
   border-color: rgba(239, 68, 68, 0.28);
 }
@@ -1297,6 +1301,61 @@ tr:hover td {
 
 .video-info {
   padding: var(--space-md);
+}
+
+.video-description-popover-overlay {
+  position: absolute;
+  inset: 10px;
+  z-index: 5;
+  display: flex;
+  pointer-events: auto;
+}
+
+.video-description-popover {
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(26, 26, 38, 0.84), rgba(19, 19, 29, 0.78));
+  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.36);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.video-description-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+}
+
+.video-description-popover-close {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border-primary);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.video-description-popover-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.55;
 }
 
 .video-title {

@@ -65,6 +65,7 @@ export default function ChannelsPage() {
   const [analyticsVideos, setAnalyticsVideos] = useState<ApiVideo[]>([])
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([])
+  const [expandedDescriptionVideoId, setExpandedDescriptionVideoId] = useState('')
   const [copyingSelectedVideoLinks, setCopyingSelectedVideoLinks] = useState(false)
   const [copiedSelectedVideoLinks, setCopiedSelectedVideoLinks] = useState(false)
   const [showInsightDescription, setShowInsightDescription] = useState(false)
@@ -172,6 +173,10 @@ export default function ChannelsPage() {
     if (decodedChannelId) return channels.find((item) => item.channel_id === decodedChannelId) || null
     return filteredChannels[0] || channels[0] || null
   }, [channels, decodedChannelId, filteredChannels])
+
+  useEffect(() => {
+    setExpandedDescriptionVideoId('')
+  }, [channel?.channel_id, videoSort, videoType])
 
   const tagInputSuggestions = useMemo(() => {
     const parts = String(tagDraftInput || '').split(/[,\uFF0C\n]+/)
@@ -591,11 +596,13 @@ export default function ChannelsPage() {
                           key={video.video_id}
                           video={video}
                           selected={selectedVideoIds.includes(video.video_id)}
+                          descriptionExpanded={expandedDescriptionVideoId === video.video_id}
                           metaDownloading={(progressState.metaProgressById[video.video_id] || 0) > 0 && (progressState.metaProgressById[video.video_id] || 0) < 100}
                           metaProgress={progressState.metaProgressById[video.video_id] || 0}
                           metaDownloaded={hasDownloadToken(video.download_status, 'meta')}
                           onMetaDownload={() => void api.createJob('download_meta', { video_id: video.video_id, force: hasDownloadToken(video.download_status, 'meta') }).catch((error: Error) => setErrorText(error.message))}
                           onCopyLink={() => void handleCopyVideoLink(video)}
+                          onToggleDescription={() => setExpandedDescriptionVideoId((current) => current === video.video_id ? '' : video.video_id)}
                           onToggleSelect={() => handleToggleVideoSelected(video.video_id)}
                           highlightGrowthSort={videoSort === 'views_7d'}
                           forceLandscape={videoType !== 'short'}

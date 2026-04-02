@@ -483,19 +483,34 @@
   width: 100%;
 }
 
-.dashboard-task-time-range input[type='time'] {
-  color-scheme: dark;
-}
-
-.dashboard-task-time-range input[type='time']::-webkit-calendar-picker-indicator {
-  filter: brightness(0) invert(1);
-  opacity: 0.92;
-}
-
 .dashboard-task-time-range span {
   color: var(--text-secondary);
   font-size: 0.82rem;
   text-align: center;
+}
+
+.dashboard-task-time-input {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-task-time-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.dashboard-task-time-segment {
+  min-width: 0;
+  text-align: center;
+}
+
+.dashboard-task-time-separator {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .dashboard-task-picker {
@@ -906,6 +921,15 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dashboard-task-op-btn {
+  min-width: 54px;
+}
+
+.dashboard-task-op-btn-danger {
+  color: #fca5a5;
 }
 
 .dashboard-task-icon-btn {

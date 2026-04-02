@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import './HomePage.css'
 import { api } from '../lib/api'
 import { formatDateTime, relTime } from '../lib/channelHelpers'
+import {
+  buildTaskEditDraft,
+  normalizeTaskTimeText,
+  type TaskEditDraft,
+} from '../lib/dashboardTaskEditing'
 import type { DashboardChannelOverview, DashboardSummary, DashboardTask } from '../types'
+import { TaskActionButtons, TaskTimeInput } from '../components/dashboard/TaskControls'
 
 const priorityOptions: Array<{ value: DashboardTask['priority']; label: string }> = [
   { value: 'high', label: '高' },
@@ -26,18 +32,6 @@ const weekdayOptions: Array<{ value: number; label: string }> = [
   { value: 6, label: '周六' },
   { value: 0, label: '周日' },
 ]
-
-type EditDraft = {
-  taskId: string
-  title: string
-  channelId: string
-  taskName: string
-  priority: DashboardTask['priority']
-  startTime: string
-  endTime: string
-  notes: string
-  status: DashboardTask['status']
-}
 
 const labelOf = <T extends string>(value: T, list: Array<{ value: T; label: string }>, fallback: string) =>
   list.find((item) => item.value === value)?.label || fallback
@@ -163,7 +157,7 @@ export default function HomePage() {
   const [taskEndTime, setTaskEndTime] = useState('')
   const [taskNotes, setTaskNotes] = useState('')
   const [taskPickerOpen, setTaskPickerOpen] = useState(false)
-  const [editDraft, setEditDraft] = useState<EditDraft | null>(null)
+  const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null)
   const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState('')
   const [savingTaskId, setSavingTaskId] = useState('')
   const [mutatingTaskId, setMutatingTaskId] = useState('')
@@ -225,10 +219,13 @@ export default function HomePage() {
   }
 
   const validateTask = (title: string, name: string, start: string, end: string) => {
+    const normalizedStart = normalizeTaskTimeText(start)
+    const normalizedEnd = normalizeTaskTimeText(end)
     if (!title.trim()) return '请先填写任务标题'
     if (!name.trim()) return '请先选择或输入任务'
-    if ((start && !end) || (!start && end)) return '开始时间和结束时间需要一起填写'
-    if (start && end && end <= start) return '结束时间必须晚于开始时间'
+    if ((start.trim() && !normalizedStart) || (end.trim() && !normalizedEnd)) return '时间请按 24 小时 HH:MM 填写'
+    if ((normalizedStart && !normalizedEnd) || (!normalizedStart && normalizedEnd)) return '开始时间和结束时间需要一起填写'
+    if (normalizedStart && normalizedEnd && normalizedEnd <= normalizedStart) return '结束时间必须晚于开始时间'
     return ''
   }
 
@@ -236,6 +233,8 @@ export default function HomePage() {
     if (!dashboard) return
     const validationError = validateTask(taskTitle, taskName, taskStartTime, taskEndTime)
     if (validationError) return setErrorText(validationError)
+    const normalizedStartTime = normalizeTaskTimeText(taskStartTime)
+    const normalizedEndTime = normalizeTaskTimeText(taskEndTime)
     setSubmitting(true)
     try {
       await api.createDashboardTask({
@@ -244,8 +243,8 @@ export default function HomePage() {
         channel_id: taskChannelId || null,
         due_date: dashboard.date,
         priority: taskPriority,
-        planned_start_time: taskStartTime || null,
-        planned_end_time: taskEndTime || null,
+        planned_start_time: normalizedStartTime || null,
+        planned_end_time: normalizedEndTime || null,
         notes: taskNotes.trim() || null,
       })
       resetTaskForm()
@@ -257,23 +256,14 @@ export default function HomePage() {
     }
   }
 
-  const beginEdit = (task: DashboardTask) =>
-    setEditDraft({
-      taskId: task.task_id,
-      title: task.title || '',
-      channelId: task.channel_id || '',
-      taskName: task.task_name || '',
-      priority: task.priority,
-      startTime: task.planned_start_time || '',
-      endTime: task.planned_end_time || '',
-      notes: task.notes || '',
-      status: task.status,
-    })
+  const beginEdit = (task: DashboardTask) => setEditDraft(buildTaskEditDraft(task))
 
-  const persistTaskDraft = async (draft: EditDraft, closeAfter = false) => {
+  const persistTaskDraft = async (draft: TaskEditDraft, closeAfter = false) => {
     if (!dashboard) return
     const validationError = validateTask(draft.title, draft.taskName, draft.startTime, draft.endTime)
     if (validationError) return setErrorText(validationError)
+    const normalizedStartTime = normalizeTaskTimeText(draft.startTime)
+    const normalizedEndTime = normalizeTaskTimeText(draft.endTime)
     setSavingTaskId(draft.taskId)
     try {
       await api.updateDashboardTask(draft.taskId, {
@@ -282,8 +272,8 @@ export default function HomePage() {
         channel_id: draft.channelId || null,
         due_date: dashboard.date,
         priority: draft.priority,
-        planned_start_time: draft.startTime || null,
-        planned_end_time: draft.endTime || null,
+        planned_start_time: normalizedStartTime || null,
+        planned_end_time: normalizedEndTime || null,
         notes: draft.notes.trim() || null,
         status: draft.status,
       })
@@ -299,12 +289,10 @@ export default function HomePage() {
     }
   }
 
-  const updateEditDraft = (patch: Partial<EditDraft>, autoSave = false) => {
+  const updateEditDraft = (patch: Partial<TaskEditDraft>) => {
     setEditDraft((current) => {
       if (!current) return current
-      const next = { ...current, ...patch }
-      if (autoSave) void persistTaskDraft(next)
-      return next
+      return { ...current, ...patch }
     })
   }
 
@@ -555,9 +543,9 @@ export default function HomePage() {
               {priorityOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
             <div className="dashboard-task-time-range">
-              <input className="input" type="time" step="60" value={taskStartTime} onChange={(e) => setTaskStartTime(e.target.value)} />
+              <TaskTimeInput className="input dashboard-task-time-input" value={taskStartTime} onChange={setTaskStartTime} aria-label="开始时间" />
               <span>到</span>
-              <input className="input" type="time" step="60" value={taskEndTime} onChange={(e) => setTaskEndTime(e.target.value)} />
+              <TaskTimeInput className="input dashboard-task-time-input" value={taskEndTime} onChange={setTaskEndTime} aria-label="结束时间" />
             </div>
             <input className="input dashboard-task-notes" value={taskNotes} onChange={(e) => setTaskNotes(e.target.value)} placeholder="备注，可留空" />
             <div className="dashboard-task-actions-inline">
@@ -590,27 +578,27 @@ export default function HomePage() {
                       <tr key={task.task_id} className={editing ? 'is-editing' : undefined}>
                         <td>{task.channel_avatar_url ? <img className="dashboard-channel-avatar" src={task.channel_avatar_url} alt={task.channel_title || ''} /> : <div className="dashboard-channel-avatar dashboard-channel-avatar-fallback">{avatarFallback(task.channel_title || '任务')}</div>}</td>
                         <td>{editing ? (
-                          <select className="input dashboard-inline-input dashboard-inline-select" value={editDraft.channelId} onChange={(e) => updateEditDraft({ channelId: e.target.value }, true)}>
+                          <select className="input dashboard-inline-input dashboard-inline-select" value={editDraft.channelId} onChange={(e) => updateEditDraft({ channelId: e.target.value })}>
                             <option value="">不关联频道</option>
                             {channelOptions.map((channel) => <option key={channel.channel_id} value={channel.channel_id}>{channel.title}</option>)}
                           </select>
                         ) : (task.channel_title || '不关联频道')}</td>
-                        <td>{editing ? <input className="input dashboard-inline-input" value={editDraft.title} onChange={(e) => updateEditDraft({ title: e.target.value })} onBlur={() => void persistTaskDraft(editDraft)} /> : <div className="dashboard-task-title-ellipsis" title={task.title}>{task.title}</div>}</td>
-                        <td>{editing ? <input className="input dashboard-inline-input" value={editDraft.taskName} onChange={(e) => updateEditDraft({ taskName: e.target.value })} onBlur={() => void persistTaskDraft(editDraft)} /> : (task.task_name || '未分类任务')}</td>
+                        <td>{editing ? <input className="input dashboard-inline-input" value={editDraft.title} onChange={(e) => updateEditDraft({ title: e.target.value })} /> : <div className="dashboard-task-title-ellipsis" title={task.title}>{task.title}</div>}</td>
+                        <td>{editing ? <input className="input dashboard-inline-input" value={editDraft.taskName} onChange={(e) => updateEditDraft({ taskName: e.target.value })} /> : (task.task_name || '未分类任务')}</td>
                         <td>{editing ? (
-                          <select className="input dashboard-inline-input dashboard-inline-select" value={editDraft.priority} onChange={(e) => updateEditDraft({ priority: e.target.value as DashboardTask['priority'] }, true)}>
+                          <select className="input dashboard-inline-input dashboard-inline-select" value={editDraft.priority} onChange={(e) => updateEditDraft({ priority: e.target.value as DashboardTask['priority'] })}>
                             {priorityOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                           </select>
                         ) : <span className={`dashboard-priority-badge priority-${task.priority}`}>{labelOf(task.priority, priorityOptions, '中')}</span>}</td>
                         <td>{editing ? (
                           <div className="dashboard-inline-time-range">
-                            <input className="input dashboard-inline-input" type="time" step="60" value={editDraft.startTime} onChange={(e) => updateEditDraft({ startTime: e.target.value })} onBlur={() => void persistTaskDraft(editDraft)} />
-                            <input className="input dashboard-inline-input" type="time" step="60" value={editDraft.endTime} onChange={(e) => updateEditDraft({ endTime: e.target.value })} onBlur={() => void persistTaskDraft(editDraft)} />
+                            <TaskTimeInput className="input dashboard-inline-input dashboard-task-time-input" value={editDraft.startTime} onChange={(value) => updateEditDraft({ startTime: value })} aria-label="编辑开始时间" onEnter={() => void persistTaskDraft(editDraft!, true)} />
+                            <TaskTimeInput className="input dashboard-inline-input dashboard-task-time-input" value={editDraft.endTime} onChange={(value) => updateEditDraft({ endTime: value })} aria-label="编辑结束时间" onEnter={() => void persistTaskDraft(editDraft!, true)} />
                           </div>
                         ) : formatTaskRange(task.planned_start_time, task.planned_end_time)}</td>
-                        <td>{editing ? <input className="input dashboard-inline-input" value={editDraft.notes} onChange={(e) => updateEditDraft({ notes: e.target.value })} onBlur={() => void persistTaskDraft(editDraft)} /> : <div className="dashboard-task-notes-ellipsis" title={task.notes || ''}>{task.notes || '-'}</div>}</td>
+                        <td>{editing ? <input className="input dashboard-inline-input" value={editDraft.notes} onChange={(e) => updateEditDraft({ notes: e.target.value })} /> : <div className="dashboard-task-notes-ellipsis" title={task.notes || ''}>{task.notes || '-'}</div>}</td>
                         <td>{editing ? (
-                            <select className="input dashboard-task-status-select dashboard-inline-select" value={editDraft.status} onChange={(e) => updateEditDraft({ status: e.target.value as DashboardTask['status'] }, true)}>
+                            <select className="input dashboard-task-status-select dashboard-inline-select" value={editDraft.status} onChange={(e) => updateEditDraft({ status: e.target.value as DashboardTask['status'] })}>
                             {statusOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                           </select>
                         ) : (
@@ -619,16 +607,16 @@ export default function HomePage() {
                           </select>
                         )}</td>
                         <td>
-                          <div className="dashboard-task-operation-cell">
-                            {editing ? (
-                              <>
-                                <button type="button" className="dashboard-task-icon-btn" onClick={() => setEditDraft(null)} disabled={savingTaskId === task.task_id} title="取消" aria-label="取消"><CancelIcon /></button>
-                              </>
-                            ) : (
-                              <button type="button" className="dashboard-task-icon-btn" onClick={() => beginEdit(task)} disabled={!!editDraft || mutatingTaskId === task.task_id} title="编辑" aria-label="编辑"><EditIcon /></button>
-                            )}
-                            <button type="button" className="dashboard-task-icon-btn danger" onClick={() => setPendingDeleteTaskId(task.task_id)} disabled={mutatingTaskId === task.task_id || savingTaskId === task.task_id} title="删除" aria-label="删除"><TrashIcon /></button>
-                          </div>
+                          <TaskActionButtons
+                            editing={editing}
+                            disableEdit={!!editDraft || mutatingTaskId === task.task_id}
+                            disableSave={savingTaskId === task.task_id}
+                            disableDelete={mutatingTaskId === task.task_id || savingTaskId === task.task_id}
+                            onCancel={() => setEditDraft(null)}
+                            onDelete={() => setPendingDeleteTaskId(task.task_id)}
+                            onEdit={() => beginEdit(task)}
+                            onSave={() => void persistTaskDraft(editDraft!, true)}
+                          />
                         </td>
                       </tr>
                     )

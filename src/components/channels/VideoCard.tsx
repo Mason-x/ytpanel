@@ -14,11 +14,13 @@ import { MiniGrowthChart, type VideoGrowthDomain } from './GrowthCharts'
 export default function VideoCard({
   video,
   selected,
+  descriptionExpanded,
   metaDownloading,
   metaProgress,
   metaDownloaded,
   onMetaDownload,
   onCopyLink,
+  onToggleDescription,
   onToggleSelect,
   highlightGrowthSort,
   forceLandscape = false,
@@ -26,11 +28,13 @@ export default function VideoCard({
 }: {
   video: ApiVideo
   selected: boolean
+  descriptionExpanded: boolean
   metaDownloading: boolean
   metaProgress: number
   metaDownloaded: boolean
   onMetaDownload: () => void
   onCopyLink: () => void
+  onToggleDescription: () => void
   onToggleSelect: () => void
   highlightGrowthSort: boolean
   forceLandscape?: boolean
@@ -45,6 +49,8 @@ export default function VideoCard({
   const isShort = contentType === 'short'
   const isLive = contentType === 'live'
   const useVerticalThumb = isShort && !forceLandscape
+  const descriptionText = String(video.description || '').trim()
+  const hasDescription = descriptionText.length > 0
   const displayedGrowth =
     video.views_change_7d != null && Number(video.views_change_7d) > 0
       ? Number(video.views_change_7d)
@@ -62,6 +68,7 @@ export default function VideoCard({
       className={[
         'video-card',
         `video-card-${typeClass}`,
+        descriptionExpanded ? 'video-card-description-open' : '',
         selected ? 'video-card-selected' : '',
         unavailable ? 'video-card-unavailable' : '',
       ]
@@ -69,6 +76,33 @@ export default function VideoCard({
         .join(' ')}
       onClick={onToggleSelect}
     >
+      {descriptionExpanded ? (
+        <div
+          className="video-description-popover-overlay"
+          role="dialog"
+          aria-label="视频描述"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="video-description-popover">
+            <div className="video-description-popover-header">
+              <strong>视频描述</strong>
+              <button
+                type="button"
+                className="video-description-popover-close"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onToggleDescription()
+                }}
+                aria-label="收起描述"
+              >
+                ×
+              </button>
+            </div>
+            <div className="video-description-popover-body">{descriptionText}</div>
+          </div>
+        </div>
+      ) : null}
+
       <a
         className={`video-thumb ${useVerticalThumb ? 'video-thumb-vertical' : ''}`}
         href={resolveVideoUrl(video)}
@@ -134,6 +168,18 @@ export default function VideoCard({
         </div>
 
         <div className="video-card-actions" data-card-action="1">
+          <button
+            type="button"
+            className="video-card-action-btn secondary"
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggleDescription()
+            }}
+            disabled={!hasDescription}
+            title={hasDescription ? (descriptionExpanded ? '收起描述' : '展开描述') : '暂无描述'}
+          >
+            {descriptionExpanded ? '收起描述' : '展开描述'}
+          </button>
           <button
             type="button"
             className={`video-card-action-btn ${metaDownloaded ? 'is-downloaded' : ''}`}

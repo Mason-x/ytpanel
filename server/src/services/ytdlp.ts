@@ -2650,12 +2650,22 @@ export function parseChannelMeta(info: any): {
   view_count_total: number | null;
   video_count: number | null;
 } {
+  const extractor = String(info?.extractor_key || info?.extractor || "").toLowerCase();
+  const isYoutubeExtractor = extractor.includes("youtube");
+
   // Find avatar from thumbnails
   let avatarUrl = null;
   if (info.thumbnails && info.thumbnails.length > 0) {
     const avatar =
-      info.thumbnails.find((t: any) => t.id === "avatar_uncropped") ||
-      info.thumbnails[0];
+      info.thumbnails.find((t: any) => t?.id === "avatar_uncropped") ||
+      info.thumbnails.find((t: any) => {
+        const url = String(t?.url || "").trim().toLowerCase();
+        if (!url) return false;
+        if (url.includes("yt3.googleusercontent.com") || url.includes("yt3.ggpht.com")) return true;
+        if (isYoutubeExtractor && url.includes("i.ytimg.com/vi/")) return false;
+        return !isYoutubeExtractor;
+      }) ||
+      (!isYoutubeExtractor ? info.thumbnails[0] : null);
     avatarUrl = avatar?.url || null;
   }
   if (!avatarUrl) {
@@ -2719,8 +2729,6 @@ export function parseChannelMeta(info: any): {
       firstEntry?.stats?.playCount ??
       firstEntry?.statsV2?.playCount,
   );
-  const extractor = String(info?.extractor_key || info?.extractor || "").toLowerCase();
-  const isYoutubeExtractor = extractor.includes("youtube");
   const fallbackVideoCount = toNullableInt(
     info?.channel_video_count ??
       firstEntry?.channel_video_count ??
