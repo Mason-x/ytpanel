@@ -29,6 +29,102 @@ export interface YoutubeApiUsage {
   auto_rotate_enabled?: boolean
 }
 
+export interface ReportingOwner {
+  owner_id: string
+  name: string
+  client_id: string
+  client_secret?: string | null
+  refresh_token?: string | null
+  proxy_url?: string | null
+  enabled: boolean
+  reporting_enabled: boolean
+  started_at?: string | null
+  last_token_refresh_at?: string | null
+  last_sync_at?: string | null
+  last_error?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface ReportingOwnerBinding {
+  id: string
+  owner_id: string
+  channel_id: string
+  enabled: boolean
+  reporting_enabled: boolean
+  started_at: string
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface ReportingRequestLog {
+  id: number
+  owner_id?: string | null
+  channel_id?: string | null
+  request_kind: string
+  request_url?: string | null
+  proxy_url_snapshot?: string | null
+  status_code?: number | null
+  success: boolean
+  error_code?: string | null
+  error_message?: string | null
+  started_at: string
+  finished_at?: string | null
+  duration_ms?: number | null
+  response_meta_json?: string | null
+}
+
+export interface ReportingOwnerUsage {
+  owner_id: string
+  request_count_24h: number
+  success_count_24h: number
+  failure_count_24h: number
+  success_rate_24h: number
+  download_count_24h: number
+  last_token_refresh_at?: string | null
+  last_sync_at?: string | null
+  last_error?: string | null
+  avg_duration_ms_24h?: number | null
+}
+
+export interface ChannelReportingSummary {
+  enabled: boolean
+  owner_id?: string | null
+  owner_name?: string | null
+  started_at?: string | null
+  latest_imported_at?: string | null
+  latest_date?: string | null
+  impressions?: number | null
+  impressions_ctr?: number | null
+  avg_view_duration_seconds?: number | null
+  avg_view_percentage?: number | null
+  traffic_source_share_json?: string | null
+}
+
+export interface ChannelReportingDailyRow {
+  date: string
+  impressions?: number | null
+  impressions_ctr?: number | null
+  avg_view_duration_seconds?: number | null
+  avg_view_percentage?: number | null
+  traffic_source_share_json?: string | null
+}
+
+export interface ChannelReportingVideoRow {
+  date: string
+  video_id: string
+  channel_id: string
+  owner_id: string
+  title?: string | null
+  webpage_url?: string | null
+  impressions?: number | null
+  impressions_ctr?: number | null
+  avg_view_duration_seconds?: number | null
+  avg_view_percentage?: number | null
+  traffic_source_share_json?: string | null
+  computed_at: string
+}
+
 export interface ApiChannel {
   channel_id: string
   platform?: string | null
