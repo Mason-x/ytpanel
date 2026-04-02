@@ -28,7 +28,13 @@ function localPathToAssetsUrl(localPath: string | null, assetsRoot: string): str
   const relativePath = path.relative(assetsRoot, absLocal);
   if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) return null;
   const normalized = relativePath.split(path.sep).join('/');
-  return `/assets/${normalized}`;
+  const baseUrl = `/assets/${normalized}`;
+  try {
+    const stat = fs.statSync(absLocal);
+    return `${baseUrl}?v=${Math.floor(stat.mtimeMs)}`;
+  } catch {
+    return baseUrl;
+  }
 }
 
 function parseYoutubeVideoId(input: unknown): string | null {

@@ -5416,6 +5416,46 @@ class JobQueue {
       }
     }
 
+    if (platform === 'youtube') {
+      const downloadRoot = getSetting('download_root') || path.join(process.cwd(), 'downloads');
+      const recentThumbTargets = db.prepare(`
+        SELECT video_id, webpage_url
+        FROM videos
+        WHERE channel_id = ?
+          AND lower(COALESCE(platform, 'youtube')) = 'youtube'
+          AND COALESCE(availability_status, 'available') = 'available'
+        ORDER BY datetime(COALESCE(published_at, created_at)) DESC
+        LIMIT 3
+      `).all(channelId) as Array<{ video_id: string; webpage_url: string | null }>;
+
+      let refreshedThumbCount = 0;
+      for (const target of recentThumbTargets) {
+        if (job.cancelled()) break;
+        const videoId = String(target?.video_id || '').trim();
+        if (!videoId) continue;
+        try {
+          const thumbResult = await ytdlp.downloadThumb(videoId, channelId, {
+            abortSignal: job.abortSignal,
+            sourceUrl: String(target?.webpage_url || '').trim() || undefined,
+          });
+          if (!thumbResult.success) {
+            logEvent('warn', `Thumbnail refresh failed for ${videoId}: ${thumbResult.error || 'unknown error'}`);
+            continue;
+          }
+          const thumbPath = path.join(downloadRoot, 'assets', 'thumbs', channelId, videoId, `${videoId}.jpg`);
+          if (fs.existsSync(thumbPath)) {
+            db.prepare(`UPDATE videos SET local_thumb_path = ? WHERE video_id = ?`).run(thumbPath, videoId);
+            refreshedThumbCount += 1;
+          }
+        } catch (error: any) {
+          logEvent('warn', `Thumbnail refresh failed for ${videoId}: ${error?.message || error}`);
+        }
+      }
+      if (refreshedThumbCount > 0) {
+        logEvent('info', `Refreshed thumbnails for ${refreshedThumbCount} recent YouTube videos`);
+      }
+    }
+
     if (scheduleMetaRetryAudit && queuedAutoMetaVideoIds.length > 0) {
       const auditJobId = uuidv4();
       db.prepare(`

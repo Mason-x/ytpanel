@@ -1356,6 +1356,33 @@ tr:hover td {
   color: var(--text-secondary);
   font-size: 0.8rem;
   line-height: 1.55;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) rgba(15, 23, 42, 0.18);
+  scrollbar-gutter: stable;
+}
+
+.video-description-popover-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.video-description-popover-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.5), rgba(99, 102, 241, 0.32));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.video-description-popover-body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(191, 219, 254, 0.56), rgba(129, 140, 248, 0.42));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.video-description-popover-body::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.22);
+  border-radius: 999px;
 }
 
 .video-title {

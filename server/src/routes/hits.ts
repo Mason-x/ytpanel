@@ -252,7 +252,13 @@ function localPathToAssetsUrl(localPath: string | null, assetsRoot: string): str
   if (!fs.existsSync(absLocal)) return null;
   if (!isInsidePath(assetsRoot, absLocal)) return null;
   const relativePath = path.relative(assetsRoot, absLocal).split(path.sep).join('/');
-  return `/assets/${relativePath}`;
+  const baseUrl = `/assets/${relativePath}`;
+  try {
+    const stat = fs.statSync(absLocal);
+    return `${baseUrl}?v=${Math.floor(stat.mtimeMs)}`;
+  } catch {
+    return baseUrl;
+  }
 }
 
 function buildHitGrowthMap(

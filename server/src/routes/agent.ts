@@ -164,7 +164,13 @@ function localPathToAssetsUrl(localPath: string | null, assetsRoot: string): str
   const absLocal = path.resolve(localPath);
   const relativePath = path.relative(assetsRoot, absLocal);
   if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) return null;
-  return `/assets/${relativePath.split(path.sep).join('/')}`;
+  const baseUrl = `/assets/${relativePath.split(path.sep).join('/')}`;
+  try {
+    const stat = fs.statSync(absLocal);
+    return `${baseUrl}?v=${Math.floor(stat.mtimeMs)}`;
+  } catch {
+    return baseUrl;
+  }
 }
 
 function youtubeThumbUrl(videoId: unknown): string | null {
