@@ -309,3 +309,129 @@ CREATE TABLE IF NOT EXISTS video_unavailable_events (
 
 CREATE INDEX IF NOT EXISTS idx_video_unavailable_events_video_at
   ON video_unavailable_events(video_id, detected_at);
+
+CREATE TABLE IF NOT EXISTS reporting_owners (
+  owner_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  client_secret TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  proxy_url TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  reporting_enabled INTEGER NOT NULL DEFAULT 1,
+  started_at TEXT,
+  last_token_refresh_at TEXT,
+  last_sync_at TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_reporting_owners_enabled
+  ON reporting_owners(enabled, reporting_enabled);
+
+CREATE TABLE IF NOT EXISTS reporting_owner_channel_bindings (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  reporting_enabled INTEGER NOT NULL DEFAULT 1,
+  started_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(owner_id) REFERENCES reporting_owners(owner_id) ON DELETE CASCADE,
+  FOREIGN KEY(channel_id) REFERENCES channels(channel_id) ON DELETE CASCADE,
+  UNIQUE(channel_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reporting_owner_channel_bindings_owner_enabled
+  ON reporting_owner_channel_bindings(owner_id, reporting_enabled);
+
+CREATE TABLE IF NOT EXISTS reporting_request_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id TEXT,
+  channel_id TEXT,
+  request_kind TEXT NOT NULL,
+  request_url TEXT,
+  proxy_url_snapshot TEXT,
+  status_code INTEGER,
+  success INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT,
+  error_message TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  duration_ms INTEGER,
+  response_meta_json TEXT NOT NULL DEFAULT '{}',
+  FOREIGN KEY(owner_id) REFERENCES reporting_owners(owner_id) ON DELETE SET NULL,
+  FOREIGN KEY(channel_id) REFERENCES channels(channel_id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_reporting_request_logs_owner_started
+  ON reporting_request_logs(owner_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS reporting_job_state (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  report_type_id TEXT NOT NULL,
+  remote_job_id TEXT,
+  remote_report_id TEXT,
+  report_start_date TEXT,
+  report_end_date TEXT,
+  discovered_at TEXT,
+  downloaded_at TEXT,
+  imported_at TEXT,
+  derived_at TEXT,
+  status TEXT NOT NULL,
+  raw_file_path TEXT,
+  checksum TEXT,
+  error_message TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(owner_id) REFERENCES reporting_owners(owner_id) ON DELETE CASCADE,
+  FOREIGN KEY(channel_id) REFERENCES channels(channel_id) ON DELETE CASCADE,
+  UNIQUE(owner_id, remote_report_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reporting_job_state_owner_report
+  ON reporting_job_state(owner_id, remote_report_id);
+
+CREATE TABLE IF NOT EXISTS reporting_raw_reports (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  report_type_id TEXT NOT NULL,
+  remote_job_id TEXT,
+  remote_report_id TEXT NOT NULL,
+  start_date TEXT,
+  end_date TEXT,
+  file_path TEXT NOT NULL,
+  file_size INTEGER,
+  checksum TEXT,
+  downloaded_at TEXT NOT NULL,
+  imported_at TEXT,
+  FOREIGN KEY(owner_id) REFERENCES reporting_owners(owner_id) ON DELETE CASCADE,
+  FOREIGN KEY(channel_id) REFERENCES channels(channel_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_reporting_raw_reports_owner_channel_dates
+  ON reporting_raw_reports(owner_id, channel_id, start_date, end_date);
+
+CREATE TABLE IF NOT EXISTS video_reporting_daily (
+  date TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  video_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  impressions INTEGER,
+  impressions_ctr REAL,
+  avg_view_duration_seconds REAL,
+  avg_view_percentage REAL,
+  traffic_source_share_json TEXT NOT NULL DEFAULT '{}',
+  source_report_ids_json TEXT NOT NULL DEFAULT '[]',
+  computed_at TEXT NOT NULL,
+  PRIMARY KEY (date, channel_id, video_id),
+  FOREIGN KEY(channel_id) REFERENCES channels(channel_id) ON DELETE CASCADE,
+  FOREIGN KEY(owner_id) REFERENCES reporting_owners(owner_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_video_reporting_daily_channel_date
+  ON video_reporting_daily(channel_id, date);

@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db.js';
 import { rangeToStartDate, todayDateStr } from '../utils/helpers.js';
+import { getJobQueue } from '../services/jobQueue.js';
+import { enqueueReportingSyncForBinding } from '../services/youtubeReportingSync.js';
 
 const router = Router();
 
@@ -103,6 +105,64 @@ function getNormalizedChannelDailySeries(db: ReturnType<typeof getDb>, channelId
       video_count: videoCount,
     };
   });
+}
+
+function getChannelReportingBinding(db: ReturnType<typeof getDb>, channelId: string): {
+  binding_id: string;
+  owner_id: string;
+  owner_name: string;
+  started_at: string;
+  enabled: number;
+  reporting_enabled: number;
+} | null {
+  const row = db.prepare(`
+    SELECT
+      b.id AS binding_id,
+      b.owner_id,
+      o.name AS owner_name,
+      b.started_at,
+      b.enabled,
+      b.reporting_enabled
+    FROM reporting_owner_channel_bindings b
+    INNER JOIN reporting_owners o ON o.owner_id = b.owner_id
+    WHERE b.channel_id = ?
+    LIMIT 1
+  `).get(channelId) as any;
+  if (!row) return null;
+  return {
+    binding_id: String(row.binding_id || '').trim(),
+    owner_id: String(row.owner_id || '').trim(),
+    owner_name: String(row.owner_name || '').trim(),
+    started_at: String(row.started_at || '').trim(),
+    enabled: Number(row.enabled || 0),
+    reporting_enabled: Number(row.reporting_enabled || 0),
+  };
+}
+
+function aggregateTrafficShareJson(rows: Array<{ traffic_source_share_json?: string | null; impressions?: number | null }>): string {
+  const totals = new Map<string, number>();
+  let weightTotal = 0;
+  for (const row of rows) {
+    const weight = Number.isFinite(Number(row.impressions)) && Number(row.impressions) > 0 ? Number(row.impressions) : 1;
+    let parsed: Record<string, number> = {};
+    try {
+      parsed = JSON.parse(String(row.traffic_source_share_json || '{}'));
+    } catch {
+      parsed = {};
+    }
+    for (const [source, share] of Object.entries(parsed)) {
+      const numericShare = Number(share);
+      if (!Number.isFinite(numericShare) || numericShare < 0) continue;
+      totals.set(source, (totals.get(source) || 0) + (numericShare * weight));
+    }
+    weightTotal += weight;
+  }
+  if (weightTotal <= 0 || totals.size === 0) return '{}';
+  const result: Record<string, number> = {};
+  for (const [source, weightedShare] of totals.entries()) {
+    result[source] = Math.round((weightedShare / weightTotal) * 1000000) / 1000000;
+  }
+  return JSON.stringify(result);
 }
 
 // GET /api/channels/:id/analytics/timeseries
@@ -280,6 +340,190 @@ router.get('/:id/analytics/day-top-videos', (req: Request, res: Response) => {
   `).all(date, prevDate, req.params.id, limitNum);
 
   res.json({ data: rows });
+});
+
+// GET /api/channels/:id/reporting/summary
+router.get('/:id/reporting/summary', (req: Request, res: Response) => {
+  const db = getDb();
+  const channelId = String(req.params.id || '').trim();
+  const binding = getChannelReportingBinding(db, channelId);
+  if (!binding || !binding.enabled || !binding.reporting_enabled) {
+    res.json({
+      enabled: false,
+      owner_id: null,
+      owner_name: null,
+      started_at: null,
+      latest_imported_at: null,
+      latest_date: null,
+      impressions: null,
+      impressions_ctr: null,
+      avg_view_duration_seconds: null,
+      avg_view_percentage: null,
+      traffic_source_share_json: '{}',
+    });
+    return;
+  }
+
+  const latestImported = db.prepare(`
+    SELECT MAX(imported_at) AS latest_imported_at
+    FROM reporting_raw_reports
+    WHERE channel_id = ?
+      AND owner_id = ?
+  `).get(channelId, binding.owner_id) as any;
+
+  const latestDateRow = db.prepare(`
+    SELECT MAX(date) AS latest_date
+    FROM video_reporting_daily
+    WHERE channel_id = ?
+      AND owner_id = ?
+  `).get(channelId, binding.owner_id) as any;
+  const latestDate = String(latestDateRow?.latest_date || '').trim();
+
+  const rows = latestDate
+    ? db.prepare(`
+      SELECT impressions, impressions_ctr, avg_view_duration_seconds, avg_view_percentage, traffic_source_share_json
+      FROM video_reporting_daily
+      WHERE channel_id = ?
+        AND owner_id = ?
+        AND date = ?
+    `).all(channelId, binding.owner_id, latestDate) as any[]
+    : [];
+
+  const impressionTotal = rows.reduce((sum, row) => sum + (Number(row?.impressions || 0) || 0), 0);
+  const ctrWeightedTotal = rows.reduce((sum, row) => {
+    const impressions = Number(row?.impressions || 0) || 0;
+    const ctr = Number(row?.impressions_ctr || 0) || 0;
+    return sum + (impressions * ctr);
+  }, 0);
+  const durationAvg = rows.length > 0
+    ? rows.reduce((sum, row) => sum + (Number(row?.avg_view_duration_seconds || 0) || 0), 0) / rows.length
+    : null;
+  const percentAvg = rows.length > 0
+    ? rows.reduce((sum, row) => sum + (Number(row?.avg_view_percentage || 0) || 0), 0) / rows.length
+    : null;
+
+  res.json({
+    enabled: true,
+    owner_id: binding.owner_id,
+    owner_name: binding.owner_name,
+    started_at: binding.started_at,
+    latest_imported_at: latestImported?.latest_imported_at || null,
+    latest_date: latestDate || null,
+    impressions: impressionTotal || null,
+    impressions_ctr: impressionTotal > 0 ? ctrWeightedTotal / impressionTotal : null,
+    avg_view_duration_seconds: durationAvg,
+    avg_view_percentage: percentAvg,
+    traffic_source_share_json: aggregateTrafficShareJson(rows),
+  });
+});
+
+// GET /api/channels/:id/reporting/daily
+router.get('/:id/reporting/daily', (req: Request, res: Response) => {
+  const db = getDb();
+  const channelId = String(req.params.id || '').trim();
+  const binding = getChannelReportingBinding(db, channelId);
+  if (!binding || !binding.enabled || !binding.reporting_enabled) {
+    res.json({ data: [], total: 0, page: 1, limit: 30 });
+    return;
+  }
+
+  const range = String(req.query.range || '28d');
+  const startDate = rangeToStartDate(range);
+  const rows = db.prepare(`
+    SELECT date, impressions, impressions_ctr, avg_view_duration_seconds, avg_view_percentage, traffic_source_share_json
+    FROM video_reporting_daily
+    WHERE channel_id = ?
+      AND owner_id = ?
+      AND date >= ?
+    ORDER BY date DESC, video_id ASC
+  `).all(channelId, binding.owner_id, startDate) as any[];
+
+  const byDate = new Map<string, any[]>();
+  for (const row of rows) {
+    const date = String(row?.date || '').trim();
+    const current = byDate.get(date) || [];
+    current.push(row);
+    byDate.set(date, current);
+  }
+
+  const data = Array.from(byDate.entries()).map(([date, items]) => {
+    const impressions = items.reduce((sum, item) => sum + (Number(item?.impressions || 0) || 0), 0);
+    const ctrWeighted = items.reduce((sum, item) => {
+      const itemImpressions = Number(item?.impressions || 0) || 0;
+      const itemCtr = Number(item?.impressions_ctr || 0) || 0;
+      return sum + (itemImpressions * itemCtr);
+    }, 0);
+    const avgDuration = items.length > 0
+      ? items.reduce((sum, item) => sum + (Number(item?.avg_view_duration_seconds || 0) || 0), 0) / items.length
+      : null;
+    const avgPercent = items.length > 0
+      ? items.reduce((sum, item) => sum + (Number(item?.avg_view_percentage || 0) || 0), 0) / items.length
+      : null;
+    return {
+      date,
+      impressions: impressions || null,
+      impressions_ctr: impressions > 0 ? ctrWeighted / impressions : null,
+      avg_view_duration_seconds: avgDuration,
+      avg_view_percentage: avgPercent,
+      traffic_source_share_json: aggregateTrafficShareJson(items),
+    };
+  }).sort((a, b) => b.date.localeCompare(a.date));
+
+  res.json({ data, total: data.length, page: 1, limit: data.length || 30 });
+});
+
+// GET /api/channels/:id/reporting/videos
+router.get('/:id/reporting/videos', (req: Request, res: Response) => {
+  const db = getDb();
+  const channelId = String(req.params.id || '').trim();
+  const binding = getChannelReportingBinding(db, channelId);
+  if (!binding || !binding.enabled || !binding.reporting_enabled) {
+    res.json({ data: [], total: 0, page: 1, limit: 100 });
+    return;
+  }
+
+  const range = String(req.query.range || '28d');
+  const startDate = rangeToStartDate(range);
+  const limit = Math.max(1, Math.min(500, Number(req.query.limit || 100) || 100));
+
+  const rows = db.prepare(`
+    SELECT
+      d.date,
+      d.video_id,
+      d.channel_id,
+      d.owner_id,
+      d.impressions,
+      d.impressions_ctr,
+      d.avg_view_duration_seconds,
+      d.avg_view_percentage,
+      d.traffic_source_share_json,
+      d.computed_at,
+      v.title,
+      v.webpage_url
+    FROM video_reporting_daily d
+    LEFT JOIN videos v ON v.video_id = d.video_id
+    WHERE d.channel_id = ?
+      AND d.owner_id = ?
+      AND d.date >= ?
+    ORDER BY d.date DESC, COALESCE(d.impressions, 0) DESC, d.video_id ASC
+    LIMIT ?
+  `).all(channelId, binding.owner_id, startDate, limit) as any[];
+
+  res.json({ data: rows, total: rows.length, page: 1, limit });
+});
+
+// POST /api/channels/:id/reporting/sync
+router.post('/:id/reporting/sync', (req: Request, res: Response) => {
+  const db = getDb();
+  const channelId = String(req.params.id || '').trim();
+  const binding = getChannelReportingBinding(db, channelId);
+  if (!binding || !binding.enabled || !binding.reporting_enabled) {
+    res.status(404).json({ error: 'reporting binding not found for channel' });
+    return;
+  }
+  const result = enqueueReportingSyncForBinding(binding.binding_id, 'manual');
+  getJobQueue().processNext();
+  res.json(result);
 });
 
 export default router;

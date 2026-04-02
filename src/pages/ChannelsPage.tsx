@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import AddChannelModal from '../components/channels/AddChannelModal'
 import ChannelSidebar from '../components/channels/ChannelSidebar'
 import { ChannelGrowthChart } from '../components/channels/GrowthCharts'
+import ReportingPanel from '../components/channels/ReportingPanel'
 import TagEditorModal from '../components/channels/TagEditorModal'
 import VideoCard from '../components/channels/VideoCard'
 import { api } from '../lib/api'
@@ -28,11 +29,20 @@ import {
   topEntries,
   type VideoType,
 } from '../lib/channelHelpers'
-import type { AnalyticsDailyRow, AnalyticsKpi, ApiChannel, ApiJob, ApiVideo } from '../types'
+import type {
+  AnalyticsDailyRow,
+  AnalyticsKpi,
+  ApiChannel,
+  ApiJob,
+  ApiVideo,
+  ChannelReportingDailyRow,
+  ChannelReportingSummary,
+  ChannelReportingVideoRow,
+} from '../types'
 
 const ALL_TAG = '__all__'
 
-type TabKey = 'videos' | 'analytics'
+type TabKey = 'videos' | 'analytics' | 'reports'
 type VideoSort = 'most_recent' | 'most_viewed' | 'views_7d'
 
 function downloadJson(filename: string, payload: unknown) {
@@ -64,6 +74,10 @@ export default function ChannelsPage() {
   const [analyticsDailyRows, setAnalyticsDailyRows] = useState<AnalyticsDailyRow[]>([])
   const [analyticsVideos, setAnalyticsVideos] = useState<ApiVideo[]>([])
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [reportingSummary, setReportingSummary] = useState<ChannelReportingSummary | null>(null)
+  const [reportingDailyRows, setReportingDailyRows] = useState<ChannelReportingDailyRow[]>([])
+  const [reportingVideos, setReportingVideos] = useState<ChannelReportingVideoRow[]>([])
+  const [reportingLoading, setReportingLoading] = useState(false)
   const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([])
   const [expandedDescriptionVideoId, setExpandedDescriptionVideoId] = useState('')
   const [copyingSelectedVideoLinks, setCopyingSelectedVideoLinks] = useState(false)
@@ -133,6 +147,24 @@ export default function ChannelsPage() {
       setErrorText(error instanceof Error ? error.message : '数据洞察加载失败')
     } finally {
       if (!silent) setAnalyticsLoading(false)
+    }
+  }
+
+  const loadReporting = async (channelRef: string, silent = false) => {
+    if (!silent) setReportingLoading(true)
+    try {
+      const [summary, daily, videosRes] = await Promise.all([
+        api.getChannelReportingSummary(channelRef),
+        api.getChannelReportingDaily(channelRef, { range: '28d' }),
+        api.getChannelReportingVideos(channelRef, { range: '28d', limit: 100 }),
+      ])
+      setReportingSummary(summary)
+      setReportingDailyRows(daily.data)
+      setReportingVideos(videosRes.data)
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : '报表数据加载失败')
+    } finally {
+      if (!silent) setReportingLoading(false)
     }
   }
 
@@ -303,6 +335,10 @@ export default function ChannelsPage() {
   }, [activeTab, channel?.channel_id])
 
   useEffect(() => {
+    if (channel && activeTab === 'reports') void loadReporting(channel.channel_id)
+  }, [activeTab, channel?.channel_id])
+
+  useEffect(() => {
     if (tagInputSuggestions.length === 0) {
       if (tagSuggestionFocusIndex !== -1) setTagSuggestionFocusIndex(-1)
       return
@@ -321,6 +357,7 @@ export default function ChannelsPage() {
         await loadChannels(true)
         if (channel?.channel_id && activeTab === 'videos') await loadVideos(channel.channel_id, true)
         if (channel?.channel_id && activeTab === 'analytics') await loadAnalytics(channel.channel_id, true)
+        if (channel?.channel_id && activeTab === 'reports') await loadReporting(channel.channel_id, true)
       } catch {
         // ignore polling failures
       }
@@ -549,6 +586,7 @@ export default function ChannelsPage() {
                         <div className="channel-tab-group">
                           <button className={`channel-tab-btn ${activeTab === 'videos' ? 'active' : ''}`} onClick={() => setActiveTab('videos')}>视频列表</button>
                           <button className={`channel-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>数据洞察</button>
+                          <button className={`channel-tab-btn ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => setActiveTab('reports')}>报表</button>
                         </div>
                       </div>
                     </div>
@@ -612,7 +650,7 @@ export default function ChannelsPage() {
                     </div>
                   )}
                 </div>
-              ) : (
+              ) : activeTab === 'analytics' ? (
                 <div style={{ paddingTop: 20, paddingBottom: 50 }}>
                   <div className="card-flat" style={{ marginBottom: 16, border: '1px solid var(--border-subtle)', background: 'linear-gradient(180deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0) 100%), var(--bg-card)', padding: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
@@ -691,6 +729,25 @@ export default function ChannelsPage() {
                       </table>
                     </div>
                   </div>
+                </div>
+              ) : (
+                <div style={{ paddingTop: 20, paddingBottom: 50 }}>
+                  <ReportingPanel
+                    enabled={!!reportingSummary?.enabled}
+                    ownerName={reportingSummary?.owner_name || null}
+                    startedAt={reportingSummary?.started_at || null}
+                    latestImportedAt={reportingSummary?.latest_imported_at || null}
+                    summary={reportingSummary}
+                    dailyRows={reportingDailyRows}
+                    videos={reportingVideos}
+                    loading={reportingLoading}
+                    onSync={() => {
+                      if (!channel?.channel_id) return
+                      void api.syncChannelReporting(channel.channel_id)
+                        .then(() => loadReporting(channel.channel_id, true))
+                        .catch((error: Error) => setErrorText(error.message))
+                    }}
+                  />
                 </div>
               )}
             </div>

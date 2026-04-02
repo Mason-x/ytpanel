@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { buildSettingsPayload, clampConcurrency, deriveSettingsFormState } from '../lib/settingsForm'
-import type { AppSettingsResponse, YoutubeApiUsage } from '../types'
+import ReportingOwnersPanel from '../components/settings/ReportingOwnersPanel'
+import type {
+  ApiChannel,
+  AppSettingsResponse,
+  ReportingOwner,
+  ReportingOwnerBinding,
+  ReportingOwnerUsage,
+  ReportingRequestLog,
+  YoutubeApiUsage,
+} from '../types'
 
 function maskApiKey(value: string) {
   const trimmed = value.trim()
@@ -11,6 +20,11 @@ function maskApiKey(value: string) {
 }
 
 const MASKED_COOKIE_TEXT = '[已保存 YouTube Cookie，点击或聚焦后重新输入以覆盖]'
+
+type ReportingOwnerWithMeta = ReportingOwner & {
+  bindings?: ReportingOwnerBinding[]
+  usage?: ReportingOwnerUsage | null
+}
 
 export default function SettingsPage() {
   const [apiKey, setApiKey] = useState('')
@@ -26,17 +40,25 @@ export default function SettingsPage() {
   const [downloadConcurrency, setDownloadConcurrency] = useState('2')
   const [savedAt, setSavedAt] = useState('')
   const [usage, setUsage] = useState<YoutubeApiUsage | null>(null)
+  const [reportingOwners, setReportingOwners] = useState<ReportingOwnerWithMeta[]>([])
+  const [channels, setChannels] = useState<ApiChannel[]>([])
+  const [selectedOwnerId, setSelectedOwnerId] = useState('')
+  const [ownerLogs, setOwnerLogs] = useState<ReportingRequestLog[]>([])
+  const [probeMessages, setProbeMessages] = useState<Record<string, string>>({})
+  const [reportingLoading, setReportingLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [errorText, setErrorText] = useState('')
 
   useEffect(() => {
     let cancelled = false
 
-    async function load() {
+    async function loadBase() {
       try {
-        const [settings, usageData] = await Promise.all([
+        const [settings, usageData, reportingOwnersRes, channelsRes] = await Promise.all([
           api.getSettings(),
           api.getYoutubeApiUsage().catch(() => null),
+          api.getReportingOwners().catch(() => ({ data: [] })),
+          api.getChannels({ platform: 'youtube', limit: 1000, sort: 'recent' }).catch(() => ({ data: [] })),
         ])
 
         if (cancelled) return
@@ -53,13 +75,18 @@ export default function SettingsPage() {
         setSyncConcurrency(nextState.syncConcurrency)
         setDownloadConcurrency(nextState.downloadConcurrency)
         setUsage(usageData)
+        setReportingOwners(reportingOwnersRes.data || [])
+        setChannels(channelsRes.data || [])
+        setSelectedOwnerId((current) => current || reportingOwnersRes.data?.[0]?.owner_id || '')
+        setReportingLoading(false)
       } catch (error) {
         if (cancelled) return
         setErrorText(error instanceof Error ? error.message : '设置加载失败')
+        setReportingLoading(false)
       }
     }
 
-    void load()
+    void loadBase()
 
     return () => {
       cancelled = true
@@ -130,6 +157,127 @@ export default function SettingsPage() {
       window.dispatchEvent(new Event('ytpanel-settings-changed'))
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : '设置保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const reloadReportingOwners = async (nextOwnerId = '') => {
+    const owners = await api.getReportingOwners()
+    setReportingOwners(owners.data || [])
+    setSelectedOwnerId(nextOwnerId || owners.data?.[0]?.owner_id || '')
+  }
+
+  const handleLoadOwnerLogs = async (ownerId: string) => {
+    const response = await api.getReportingOwnerLogs(ownerId, { limit: 100 })
+    setOwnerLogs(response.data || [])
+  }
+
+  const handleCreateOwner = async (payload: Record<string, unknown>) => {
+    setSaving(true)
+    setErrorText('')
+    try {
+      const created = await api.createReportingOwner(payload)
+      await reloadReportingOwners(created.owner_id)
+      await handleLoadOwnerLogs(created.owner_id)
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : '创建 Owner 失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateOwner = async (ownerId: string, payload: Record<string, unknown>) => {
+    setSaving(true)
+    setErrorText('')
+    try {
+      await api.updateReportingOwner(ownerId, payload)
+      await reloadReportingOwners(ownerId)
+      await handleLoadOwnerLogs(ownerId)
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : '更新 Owner 失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteOwner = async (ownerId: string) => {
+    setSaving(true)
+    setErrorText('')
+    try {
+      await api.deleteReportingOwner(ownerId)
+      await reloadReportingOwners('')
+      setOwnerLogs([])
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : '删除 Owner 失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleProbeOwner = async (ownerId: string) => {
+    setSaving(true)
+    setErrorText('')
+    try {
+      const result = await api.testReportingOwnerProxy(ownerId)
+      setProbeMessages((current) => ({
+        ...current,
+        [ownerId]: String(result.message || JSON.stringify(result)),
+      }))
+      await handleLoadOwnerLogs(ownerId)
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : '代理检测失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCreateBinding = async (ownerId: string, payload: Record<string, unknown>) => {
+    setSaving(true)
+    setErrorText('')
+    try {
+      await api.createReportingBinding(ownerId, payload)
+      await reloadReportingOwners(ownerId)
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : '创建频道绑定失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateBinding = async (bindingId: string, payload: Record<string, unknown>) => {
+    setSaving(true)
+    setErrorText('')
+    try {
+      await api.updateReportingBinding(bindingId, payload)
+      await reloadReportingOwners(selectedOwnerId)
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : '更新频道绑定失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteBinding = async (bindingId: string) => {
+    setSaving(true)
+    setErrorText('')
+    try {
+      await api.deleteReportingBinding(bindingId)
+      await reloadReportingOwners(selectedOwnerId)
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : '删除频道绑定失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSyncBinding = async (bindingId: string) => {
+    setSaving(true)
+    setErrorText('')
+    try {
+      await api.syncReportingBinding(bindingId)
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : '同步报表失败')
     } finally {
       setSaving(false)
     }
@@ -256,6 +404,28 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+
+          <ReportingOwnersPanel
+            owners={reportingOwners}
+            channels={channels}
+            selectedOwnerId={selectedOwnerId}
+            ownerLogs={ownerLogs}
+            probeMessages={probeMessages}
+            loading={reportingLoading}
+            saving={saving}
+            onSelectOwner={(ownerId) => {
+              setSelectedOwnerId(ownerId)
+            }}
+            onCreateOwner={handleCreateOwner}
+            onUpdateOwner={handleUpdateOwner}
+            onDeleteOwner={handleDeleteOwner}
+            onProbeOwner={handleProbeOwner}
+            onCreateBinding={handleCreateBinding}
+            onUpdateBinding={handleUpdateBinding}
+            onDeleteBinding={handleDeleteBinding}
+            onSyncBinding={handleSyncBinding}
+            onLoadOwnerLogs={handleLoadOwnerLogs}
+          />
         </section>
 
         <aside className="settings-side">
