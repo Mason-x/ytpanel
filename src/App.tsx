@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import HomePage from './pages/HomePage'
 import ChannelsPage from './pages/ChannelsPage'
+import QualityChecklistPage from './pages/QualityChecklistPage'
 import SettingsPage from './pages/SettingsPage'
 
 export default function App() {
@@ -11,6 +12,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/channels/:channelId?" element={<ChannelsPage />} />
+          <Route path="/quality-checklist" element={<QualityChecklistPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

@@ -1,0 +1,16 @@
+.quality-checklist-page {
+  width: 100%;
+}
+
+.quality-checklist-shell {
+  width: 100%;
+  background: transparent;
+}
+
+.quality-checklist-frame {
+  display: block;
+  width: 100%;
+  min-height: 960px;
+  border: 0;
+  background: transparent;
+}
