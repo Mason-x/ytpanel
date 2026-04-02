@@ -2,6 +2,7 @@ import https from 'https';
 import { ProxyAgent } from 'undici';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import { normalizeReportingOwnerProxyUrl, type ReportingOwnerRow } from './reportingOwners.js';
+import { insertReportingRequestLog, updateReportingRequestLog } from './reportingProxyProbe.js';
 
 type ReportingClientRequestOptions = {
   method?: string;
@@ -120,15 +121,41 @@ export async function refreshReportingAccessToken(
     grant_type: 'refresh_token',
   }).toString();
 
-  const response = await requestText(
-    'https://oauth2.googleapis.com/token',
-    String(owner.proxy_url || '').trim(),
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    },
-  );
+  const startedAt = new Date();
+  const logId = insertReportingRequestLog({
+    owner_id: String(owner.owner_id || '').trim() || null,
+    request_kind: 'token_refresh',
+    request_url: 'https://oauth2.googleapis.com/token',
+    proxy_url_snapshot: String(owner.proxy_url || '').trim() || null,
+    success: false,
+    error_code: 'pending',
+    error_message: 'token refresh started',
+    started_at: startedAt.toISOString().replace('T', ' ').replace('Z', ''),
+    response_meta_json: '{}',
+  });
+
+  let response: { status: number; body: string };
+  try {
+    response = await requestText(
+      'https://oauth2.googleapis.com/token',
+      String(owner.proxy_url || '').trim(),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      },
+    );
+  } catch (error: any) {
+    updateReportingRequestLog(logId, {
+      success: false,
+      error_code: 'request_failed',
+      error_message: String(error?.message || error || 'request_failed'),
+      finished_at: new Date().toISOString().replace('T', ' ').replace('Z', ''),
+      duration_ms: Date.now() - startedAt.getTime(),
+      response_meta_json: '{}',
+    });
+    throw error;
+  }
 
   let payload: any = null;
   try {
@@ -138,8 +165,30 @@ export async function refreshReportingAccessToken(
   }
 
   if (!(response.status >= 200 && response.status < 300) || !String(payload?.access_token || '').trim()) {
+    updateReportingRequestLog(logId, {
+      status_code: response.status,
+      success: false,
+      error_code: 'token_refresh_failed',
+      error_message: `reporting token refresh failed (${response.status || 0})`,
+      finished_at: new Date().toISOString().replace('T', ' ').replace('Z', ''),
+      duration_ms: Date.now() - startedAt.getTime(),
+      response_meta_json: JSON.stringify(payload || {}),
+    });
     throw new Error(`reporting token refresh failed (${response.status || 0})`);
   }
+
+  updateReportingRequestLog(logId, {
+    status_code: response.status,
+    success: true,
+    error_code: null,
+    error_message: null,
+    finished_at: new Date().toISOString().replace('T', ' ').replace('Z', ''),
+    duration_ms: Date.now() - startedAt.getTime(),
+    response_meta_json: JSON.stringify({
+      expires_in: payload?.expires_in ?? null,
+      token_type: payload?.token_type || 'Bearer',
+    }),
+  });
 
   return {
     access_token: String(payload.access_token || '').trim(),

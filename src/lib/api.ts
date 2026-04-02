@@ -12,6 +12,7 @@ import type {
   DashboardTask,
   ReportingOwner,
   ReportingOwnerBinding,
+  ReportingOwnerProbeResult,
   ReportingOwnerUsage,
   ReportingRequestLog,
   YoutubeApiUsage,
@@ -72,7 +73,7 @@ export const api = {
   deleteReportingOwner: (ownerId: string) =>
     request<{ success?: boolean }>(`/reporting/owners/${encodeURIComponent(ownerId)}`, { method: 'DELETE' }),
   testReportingOwnerProxy: (ownerId: string, payload?: Record<string, unknown>) =>
-    request<Record<string, unknown>>(`/reporting/owners/${encodeURIComponent(ownerId)}/proxy-test`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+    request<ReportingOwnerProbeResult>(`/reporting/owners/${encodeURIComponent(ownerId)}/proxy-test`, { method: 'POST', body: JSON.stringify(payload || {}) }),
   getReportingOwnerLogs: (ownerId: string, params?: Record<string, string | number | null | undefined>) =>
     request<{ data: ReportingRequestLog[] }>(withQuery(`/reporting/owners/${encodeURIComponent(ownerId)}/logs`, params)),
   getReportingOwnerUsage: (ownerId: string) =>

@@ -55,7 +55,7 @@ type CreateReportingBindingInput = {
   channel_id: string;
   enabled?: boolean;
   reporting_enabled?: boolean;
-  started_at: string;
+  started_at?: string;
 };
 
 type UpdateReportingBindingInput = Partial<CreateReportingBindingInput>;
@@ -115,6 +115,10 @@ function normalizeDateOnly(value: unknown, fieldName: string, required = false):
     throw new Error(`${fieldName} is invalid`);
   }
   return text;
+}
+
+function todayDateOnly(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export function createMaskedReportingOwnerSecretPlaceholder(
@@ -369,7 +373,7 @@ export function createReportingBinding(
   }
 
   const bindingId = uuidv4();
-  const startedAt = normalizeDateOnly(input.started_at, 'started_at', true) as string;
+  const startedAt = normalizeDateOnly(input.started_at, 'started_at', false) || todayDateOnly();
   const enabled = toBooleanFlag(input.enabled, true);
   const reportingEnabled = toBooleanFlag(input.reporting_enabled, true);
 

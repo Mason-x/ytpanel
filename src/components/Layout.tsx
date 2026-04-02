@@ -128,9 +128,6 @@ export default function Layout() {
               <NavLink to="/channels" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                 频道管理
               </NavLink>
-              <NavLink to="/quality-checklist" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                质检清单
-              </NavLink>
               <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                 设置
               </NavLink>

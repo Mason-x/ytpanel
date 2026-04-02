@@ -82,6 +82,18 @@ function getString(row: ParsedRow, keys: string[]): string {
   return '';
 }
 
+function normalizeDate(value: string): string {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  if (/^\d{8}$/.test(text)) {
+    return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
+  }
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return text;
+}
+
 function getNumber(row: ParsedRow, keys: string[]): number | null {
   const raw = getString(row, keys);
   if (!raw) return null;
@@ -98,10 +110,10 @@ export function parseYoutubeReportingCsv(
   if (reportTypeId === 'channel_reach_basic_a1') {
     return rows
       .map((row) => ({
-        date: getString(row, ['day', 'date']),
+        date: normalizeDate(getString(row, ['day', 'date'])),
         video_id: getString(row, ['video_id', 'video']),
-        impressions: getNumber(row, ['impressions']),
-        impressions_ctr: getNumber(row, ['impressions_ctr', 'impression_ctr']),
+        impressions: getNumber(row, ['video_thumbnail_impressions', 'impressions']),
+        impressions_ctr: getNumber(row, ['video_thumbnail_impressions_ctr', 'impressions_ctr', 'impression_ctr']),
       }))
       .filter((row) => row.date && row.video_id);
   }
@@ -109,10 +121,10 @@ export function parseYoutubeReportingCsv(
   if (reportTypeId === 'channel_basic_a3') {
     return rows
       .map((row) => ({
-        date: getString(row, ['day', 'date']),
+        date: normalizeDate(getString(row, ['day', 'date'])),
         video_id: getString(row, ['video_id', 'video']),
         avg_view_duration_seconds: getNumber(row, ['average_view_duration_seconds', 'averageViewDuration']),
-        avg_view_percentage: getNumber(row, ['average_view_percentage', 'averageViewPercentage']),
+        avg_view_percentage: getNumber(row, ['average_view_duration_percentage', 'average_view_percentage', 'averageViewPercentage']),
       }))
       .filter((row) => row.date && row.video_id);
   }
@@ -120,7 +132,7 @@ export function parseYoutubeReportingCsv(
   if (reportTypeId === 'channel_traffic_source_a3') {
     return rows
       .map((row) => ({
-        date: getString(row, ['day', 'date']),
+        date: normalizeDate(getString(row, ['day', 'date'])),
         video_id: getString(row, ['video_id', 'video']),
         traffic_source_type: getString(row, ['traffic_source_type', 'insightTrafficSourceType']),
         views: getNumber(row, ['views']),

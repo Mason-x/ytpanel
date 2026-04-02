@@ -277,6 +277,16 @@ export default function ChannelsPage() {
     return next
   }, [jobs])
 
+  const activeReportingSyncChannelIds = useMemo(() => {
+    const next = new Set<string>()
+    jobs.forEach((job) => {
+      if (job.type !== 'sync_reporting_channel' || !['queued', 'running', 'canceling'].includes(job.status)) return
+      const id = String(parseJobPayload(job.payload_json).channel_id || '').trim()
+      if (id) next.add(id)
+    })
+    return next
+  }, [jobs])
+
   const progressState = useMemo(() => {
     const metaProgressById: Record<string, number> = {}
     jobs.forEach((job) => {
@@ -735,12 +745,12 @@ export default function ChannelsPage() {
                   <ReportingPanel
                     enabled={!!reportingSummary?.enabled}
                     ownerName={reportingSummary?.owner_name || null}
-                    startedAt={reportingSummary?.started_at || null}
                     latestImportedAt={reportingSummary?.latest_imported_at || null}
                     summary={reportingSummary}
                     dailyRows={reportingDailyRows}
                     videos={reportingVideos}
                     loading={reportingLoading}
+                    syncing={!!channel?.channel_id && activeReportingSyncChannelIds.has(channel.channel_id)}
                     onSync={() => {
                       if (!channel?.channel_id) return
                       void api.syncChannelReporting(channel.channel_id)

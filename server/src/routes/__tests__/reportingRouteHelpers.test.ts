@@ -9,6 +9,7 @@ import {
   buildReportingOwnerUsageSummary,
   serializeReportingOwnerResponse,
 } from '../reporting.js';
+import { isReportingVideoVisible } from '../analytics.js';
 import {
   enqueueDailyReportingSyncs,
   enqueueReportingSyncForBinding,
@@ -72,6 +73,39 @@ test('enqueueReportingSyncForBinding creates a sync_reporting_channel job', () =
     assert.equal(row.type, 'sync_reporting_channel');
     assert.match(String(row.status || ''), /^(queued|running|done|failed)$/);
     assert.match(String(row.payload_json || ''), /"binding_id":/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('enqueueReportingSyncForBinding reuses active job for the same binding', () => {
+  const fixture = initTestDb();
+  try {
+    const owner = createReportingOwner({
+      name: 'Owner One',
+      client_id: 'client-id-1',
+      client_secret: 'client-secret-1',
+      refresh_token: 'refresh-token-1',
+    });
+    const binding = createReportingBinding(owner.owner_id, {
+      channel_id: 'UC_SYNC_1',
+      enabled: true,
+      reporting_enabled: true,
+    });
+
+    const first = enqueueReportingSyncForBinding(binding.id, 'manual');
+    getDb().prepare(`UPDATE jobs SET status = 'running', started_at = datetime('now') WHERE job_id = ?`).run(first.job_id);
+
+    const second = enqueueReportingSyncForBinding(binding.id, 'manual');
+    assert.equal(second.job_id, first.job_id);
+    assert.equal(second.status, 'running');
+
+    const rows = getDb().prepare(`
+      SELECT job_id
+      FROM jobs
+      WHERE type = 'sync_reporting_channel'
+    `).all() as Array<{ job_id: string }>;
+    assert.equal(rows.length, 1);
   } finally {
     fixture.cleanup();
   }
@@ -194,4 +228,10 @@ test('buildReportingOwnerUsageSummary computes success rate from log counts', ()
   assert.equal(usage.owner_id, 'owner-1');
   assert.equal(usage.success_rate_24h, 0.8);
   assert.equal(usage.download_count_24h, 2);
+});
+
+test('isReportingVideoVisible excludes unavailable videos from reporting views', () => {
+  assert.equal(isReportingVideoVisible('available'), true);
+  assert.equal(isReportingVideoVisible(null), true);
+  assert.equal(isReportingVideoVisible('unavailable'), false);
 });

@@ -4,6 +4,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../db.js';
 import { insertReportingRequestLog } from './reportingProxyProbe.js';
+import { updateReportingRequestLog } from './reportingProxyProbe.js';
 import type { ReportingOwnerBindingRow, ReportingOwnerRow } from './reportingOwners.js';
 import { deriveVideoReportingDaily, upsertVideoReportingDaily } from './youtubeReportingDerive.js';
 import {
@@ -380,6 +381,22 @@ export function enqueueReportingSyncForBinding(bindingId: string, trigger: 'manu
     throw new Error('reporting binding not found');
   }
 
+  const activeJob = getDb().prepare(`
+    SELECT job_id, status
+    FROM jobs
+    WHERE type = 'sync_reporting_channel'
+      AND status IN ('queued', 'running', 'canceling')
+      AND json_extract(payload_json, '$.binding_id') = ?
+    ORDER BY datetime(created_at) DESC
+    LIMIT 1
+  `).get(bindingId) as { job_id?: string; status?: string } | undefined;
+  if (String(activeJob?.job_id || '').trim()) {
+    return {
+      job_id: String(activeJob?.job_id || '').trim(),
+      status: String(activeJob?.status || 'running').trim() as 'queued' | 'running' | 'canceling',
+    };
+  }
+
   const jobId = uuidv4();
   getDb().prepare(`
     INSERT INTO jobs (job_id, type, payload_json, status)
@@ -429,19 +446,79 @@ export async function syncReportingBinding(
   const listReports = dependencies.listReports || productionListReports;
   const downloadReport = dependencies.downloadReport || productionDownloadReport;
 
+  const withRequestLog = async <T,>(
+    requestKind: string,
+    requestUrl: string,
+    run: () => Promise<T>,
+    responseMeta: (value: T) => unknown = () => ({}),
+  ): Promise<T> => {
+    const startedAt = new Date();
+    const logId = insertReportingRequestLog({
+      owner_id: owner.owner_id,
+      channel_id: binding.channel_id,
+      request_kind: requestKind,
+      request_url: requestUrl,
+      proxy_url_snapshot: owner.proxy_url || null,
+      success: false,
+      error_code: 'pending',
+      error_message: `${requestKind} started`,
+      started_at: startedAt.toISOString().replace('T', ' ').replace('Z', ''),
+      response_meta_json: '{}',
+    });
+    try {
+      const value = await run();
+      updateReportingRequestLog(logId, {
+        status_code: 200,
+        success: true,
+        error_code: null,
+        error_message: null,
+        finished_at: new Date().toISOString().replace('T', ' ').replace('Z', ''),
+        duration_ms: Date.now() - startedAt.getTime(),
+        response_meta_json: JSON.stringify(responseMeta(value) || {}),
+      });
+      return value;
+    } catch (error: any) {
+      updateReportingRequestLog(logId, {
+        status_code: null,
+        success: false,
+        error_code: `${requestKind}_failed`,
+        error_message: String(error?.message || error || `${requestKind}_failed`),
+        finished_at: new Date().toISOString().replace('T', ' ').replace('Z', ''),
+        duration_ms: Date.now() - startedAt.getTime(),
+        response_meta_json: '{}',
+      });
+      throw error;
+    }
+  };
+
   try {
-    const availableReportTypeIds = await listReportTypes(owner);
+    const availableReportTypeIds = await withRequestLog(
+      'report_types_list',
+      'https://youtubereporting.googleapis.com/v1/reportTypes?pageSize=200',
+      () => listReportTypes(owner),
+      (value) => ({ count: Array.isArray(value) ? value.length : 0 }),
+    );
     const targetReportTypeIds = REQUIRED_REPORT_TYPE_IDS.filter((reportTypeId) => availableReportTypeIds.length === 0 || availableReportTypeIds.includes(reportTypeId));
     if (targetReportTypeIds.length === 0) {
       throw new Error('required reporting report types are unavailable');
     }
 
-    const existingJobs = await listJobs(owner);
+    const existingJobs = await withRequestLog(
+      'reporting_jobs_list',
+      'https://youtubereporting.googleapis.com/v1/jobs?pageSize=200',
+      () => listJobs(owner),
+      (value) => ({ count: Array.isArray(value) ? value.length : 0 }),
+    );
     const jobsByReportType = new Map(existingJobs.map((job) => [job.reportTypeId, job] as const));
 
     for (const reportTypeId of targetReportTypeIds) {
       if (!jobsByReportType.has(reportTypeId)) {
-        const created = await createJob(owner, reportTypeId);
+        const created = await withRequestLog(
+          'reporting_job_create',
+          'https://youtubereporting.googleapis.com/v1/jobs',
+          () => createJob(owner, reportTypeId),
+          (value) => value,
+        );
         jobsByReportType.set(reportTypeId, created);
       }
     }
@@ -450,7 +527,12 @@ export async function syncReportingBinding(
     for (const reportTypeId of targetReportTypeIds) {
       const job = jobsByReportType.get(reportTypeId);
       if (!job) continue;
-      const reports = await listReports(owner, job);
+      const reports = await withRequestLog(
+        'reporting_reports_list',
+        `https://youtubereporting.googleapis.com/v1/jobs/${encodeURIComponent(job.id)}/reports?pageSize=200`,
+        () => listReports(owner, job),
+        (value) => ({ count: Array.isArray(value) ? value.length : 0, job_id: job.id }),
+      );
       for (const report of reports) {
         const existing = getDb().prepare(`
           SELECT raw_file_path
@@ -462,9 +544,12 @@ export async function syncReportingBinding(
           continue;
         }
 
-        const downloadStartedAt = new Date();
-        const csvText = await downloadReport(owner, report);
-        const downloadFinishedAt = new Date();
+        const csvText = await withRequestLog(
+          'report_download',
+          report.downloadUrl,
+          () => downloadReport(owner, report),
+          (value) => ({ bytes: String(value || '').length, remote_report_id: report.id }),
+        );
         const { filePath, checksum, fileSize } = writeRawReportFile(
           owner.owner_id,
           binding.channel_id,
@@ -482,24 +567,6 @@ export async function syncReportingBinding(
           fileSize,
           checksum,
         );
-        insertReportingRequestLog({
-          owner_id: owner.owner_id,
-          channel_id: binding.channel_id,
-          request_kind: 'report_download',
-          request_url: report.downloadUrl,
-          proxy_url_snapshot: owner.proxy_url || null,
-          status_code: 200,
-          success: true,
-          started_at: downloadStartedAt.toISOString().replace('T', ' ').replace('Z', ''),
-          finished_at: downloadFinishedAt.toISOString().replace('T', ' ').replace('Z', ''),
-          duration_ms: Math.max(0, downloadFinishedAt.getTime() - downloadStartedAt.getTime()),
-          response_meta_json: JSON.stringify({
-            remote_report_id: report.id,
-            report_type_id: reportTypeId,
-            checksum,
-            file_size: fileSize,
-          }),
-        });
         downloadedReports += 1;
       }
     }

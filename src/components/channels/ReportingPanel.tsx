@@ -7,12 +7,12 @@ import type {
 type Props = {
   enabled: boolean
   ownerName: string | null
-  startedAt: string | null
   latestImportedAt: string | null
   summary: ChannelReportingSummary | null
   dailyRows: ChannelReportingDailyRow[]
   videos: ChannelReportingVideoRow[]
   loading: boolean
+  syncing: boolean
   onSync: () => void
 }
 
@@ -62,12 +62,12 @@ function renderTrafficShares(trafficSourceShareJson?: string | null) {
 export default function ReportingPanel({
   enabled,
   ownerName,
-  startedAt,
   latestImportedAt,
   summary,
   dailyRows,
   videos,
   loading,
+  syncing,
   onSync,
 }: Props) {
   if (!enabled) {
@@ -92,9 +92,11 @@ export default function ReportingPanel({
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontWeight: 700 }}>YouTube Reporting 报表指标</div>
-            <div className="form-help">{`Owner: ${ownerName || 'N/A'} · 启用日期: ${startedAt || 'N/A'} · 最近导入: ${latestImportedAt || 'N/A'}`}</div>
+            <div className="form-help">{`Owner: ${ownerName || 'N/A'} · 最近导入: ${latestImportedAt || 'N/A'}`}</div>
           </div>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={onSync}>同步报表</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onSync} disabled={syncing}>
+            {syncing ? '同步中…' : '同步报表'}
+          </button>
         </div>
       </div>
 

@@ -7,6 +7,7 @@ import type {
   AppSettingsResponse,
   ReportingOwner,
   ReportingOwnerBinding,
+  ReportingOwnerProbeResult,
   ReportingOwnerUsage,
   ReportingRequestLog,
   YoutubeApiUsage,
@@ -24,6 +25,15 @@ const MASKED_COOKIE_TEXT = '[已保存 YouTube Cookie，点击或聚焦后重新
 type ReportingOwnerWithMeta = ReportingOwner & {
   bindings?: ReportingOwnerBinding[]
   usage?: ReportingOwnerUsage | null
+}
+
+type OwnerModalSubmitPayload = {
+  mode: 'create' | 'edit'
+  ownerId?: string
+  ownerPayload: Record<string, unknown>
+  createBindings: Array<Record<string, unknown>>
+  updateBindings: Array<{ id: string; payload: Record<string, unknown> }>
+  deleteBindingIds: string[]
 }
 
 export default function SettingsPage() {
@@ -44,7 +54,7 @@ export default function SettingsPage() {
   const [channels, setChannels] = useState<ApiChannel[]>([])
   const [selectedOwnerId, setSelectedOwnerId] = useState('')
   const [ownerLogs, setOwnerLogs] = useState<ReportingRequestLog[]>([])
-  const [probeMessages, setProbeMessages] = useState<Record<string, string>>({})
+  const [probeResults, setProbeResults] = useState<Record<string, ReportingOwnerProbeResult>>({})
   const [reportingLoading, setReportingLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [errorText, setErrorText] = useState('')
@@ -173,34 +183,6 @@ export default function SettingsPage() {
     setOwnerLogs(response.data || [])
   }
 
-  const handleCreateOwner = async (payload: Record<string, unknown>) => {
-    setSaving(true)
-    setErrorText('')
-    try {
-      const created = await api.createReportingOwner(payload)
-      await reloadReportingOwners(created.owner_id)
-      await handleLoadOwnerLogs(created.owner_id)
-    } catch (error) {
-      setErrorText(error instanceof Error ? error.message : '创建 Owner 失败')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleUpdateOwner = async (ownerId: string, payload: Record<string, unknown>) => {
-    setSaving(true)
-    setErrorText('')
-    try {
-      await api.updateReportingOwner(ownerId, payload)
-      await reloadReportingOwners(ownerId)
-      await handleLoadOwnerLogs(ownerId)
-    } catch (error) {
-      setErrorText(error instanceof Error ? error.message : '更新 Owner 失败')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const handleDeleteOwner = async (ownerId: string) => {
     setSaving(true)
     setErrorText('')
@@ -220,52 +202,13 @@ export default function SettingsPage() {
     setErrorText('')
     try {
       const result = await api.testReportingOwnerProxy(ownerId)
-      setProbeMessages((current) => ({
+      setProbeResults((current) => ({
         ...current,
-        [ownerId]: String(result.message || JSON.stringify(result)),
+        [ownerId]: result as ReportingOwnerProbeResult,
       }))
       await handleLoadOwnerLogs(ownerId)
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : '代理检测失败')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleCreateBinding = async (ownerId: string, payload: Record<string, unknown>) => {
-    setSaving(true)
-    setErrorText('')
-    try {
-      await api.createReportingBinding(ownerId, payload)
-      await reloadReportingOwners(ownerId)
-    } catch (error) {
-      setErrorText(error instanceof Error ? error.message : '创建频道绑定失败')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleUpdateBinding = async (bindingId: string, payload: Record<string, unknown>) => {
-    setSaving(true)
-    setErrorText('')
-    try {
-      await api.updateReportingBinding(bindingId, payload)
-      await reloadReportingOwners(selectedOwnerId)
-    } catch (error) {
-      setErrorText(error instanceof Error ? error.message : '更新频道绑定失败')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleDeleteBinding = async (bindingId: string) => {
-    setSaving(true)
-    setErrorText('')
-    try {
-      await api.deleteReportingBinding(bindingId)
-      await reloadReportingOwners(selectedOwnerId)
-    } catch (error) {
-      setErrorText(error instanceof Error ? error.message : '删除频道绑定失败')
     } finally {
       setSaving(false)
     }
@@ -278,6 +221,39 @@ export default function SettingsPage() {
       await api.syncReportingBinding(bindingId)
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : '同步报表失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSaveOwnerModal = async (payload: OwnerModalSubmitPayload) => {
+    setSaving(true)
+    setErrorText('')
+    try {
+      let ownerId = String(payload.ownerId || '').trim()
+      if (payload.mode === 'create') {
+        const created = await api.createReportingOwner(payload.ownerPayload)
+        ownerId = created.owner_id
+      } else {
+        if (!ownerId) throw new Error('缺少 Owner ID')
+        await api.updateReportingOwner(ownerId, payload.ownerPayload)
+      }
+
+      for (const bindingId of payload.deleteBindingIds) {
+        await api.deleteReportingBinding(bindingId)
+      }
+      for (const item of payload.updateBindings) {
+        await api.updateReportingBinding(item.id, item.payload)
+      }
+      for (const item of payload.createBindings) {
+        await api.createReportingBinding(ownerId, item)
+      }
+
+      await reloadReportingOwners(ownerId)
+      await handleLoadOwnerLogs(ownerId)
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : '保存 Owner 失败')
+      throw error
     } finally {
       setSaving(false)
     }
@@ -410,20 +386,15 @@ export default function SettingsPage() {
             channels={channels}
             selectedOwnerId={selectedOwnerId}
             ownerLogs={ownerLogs}
-            probeMessages={probeMessages}
+            probeResults={probeResults}
             loading={reportingLoading}
             saving={saving}
             onSelectOwner={(ownerId) => {
               setSelectedOwnerId(ownerId)
             }}
-            onCreateOwner={handleCreateOwner}
-            onUpdateOwner={handleUpdateOwner}
+            onSaveOwnerModal={handleSaveOwnerModal}
             onDeleteOwner={handleDeleteOwner}
             onProbeOwner={handleProbeOwner}
-            onCreateBinding={handleCreateBinding}
-            onUpdateBinding={handleUpdateBinding}
-            onDeleteBinding={handleDeleteBinding}
-            onSyncBinding={handleSyncBinding}
             onLoadOwnerLogs={handleLoadOwnerLogs}
           />
         </section>

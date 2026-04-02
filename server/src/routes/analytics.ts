@@ -165,6 +165,11 @@ function aggregateTrafficShareJson(rows: Array<{ traffic_source_share_json?: str
   return JSON.stringify(result);
 }
 
+export function isReportingVideoVisible(availabilityStatus: unknown): boolean {
+  const normalized = String(availabilityStatus || '').trim().toLowerCase();
+  return !normalized || normalized === 'available';
+}
+
 // GET /api/channels/:id/analytics/timeseries
 router.get('/:id/analytics/timeseries', (req: Request, res: Response) => {
   const db = getDb();
@@ -372,20 +377,24 @@ router.get('/:id/reporting/summary', (req: Request, res: Response) => {
   `).get(channelId, binding.owner_id) as any;
 
   const latestDateRow = db.prepare(`
-    SELECT MAX(date) AS latest_date
-    FROM video_reporting_daily
-    WHERE channel_id = ?
-      AND owner_id = ?
+    SELECT MAX(d.date) AS latest_date
+    FROM video_reporting_daily d
+    LEFT JOIN videos v ON v.video_id = d.video_id
+    WHERE d.channel_id = ?
+      AND d.owner_id = ?
+      AND COALESCE(v.availability_status, 'available') = 'available'
   `).get(channelId, binding.owner_id) as any;
   const latestDate = String(latestDateRow?.latest_date || '').trim();
 
   const rows = latestDate
     ? db.prepare(`
-      SELECT impressions, impressions_ctr, avg_view_duration_seconds, avg_view_percentage, traffic_source_share_json
-      FROM video_reporting_daily
-      WHERE channel_id = ?
-        AND owner_id = ?
-        AND date = ?
+      SELECT d.impressions, d.impressions_ctr, d.avg_view_duration_seconds, d.avg_view_percentage, d.traffic_source_share_json
+      FROM video_reporting_daily d
+      LEFT JOIN videos v ON v.video_id = d.video_id
+      WHERE d.channel_id = ?
+        AND d.owner_id = ?
+        AND d.date = ?
+        AND COALESCE(v.availability_status, 'available') = 'available'
     `).all(channelId, binding.owner_id, latestDate) as any[]
     : [];
 
@@ -430,12 +439,14 @@ router.get('/:id/reporting/daily', (req: Request, res: Response) => {
   const range = String(req.query.range || '28d');
   const startDate = rangeToStartDate(range);
   const rows = db.prepare(`
-    SELECT date, impressions, impressions_ctr, avg_view_duration_seconds, avg_view_percentage, traffic_source_share_json
-    FROM video_reporting_daily
-    WHERE channel_id = ?
-      AND owner_id = ?
-      AND date >= ?
-    ORDER BY date DESC, video_id ASC
+    SELECT d.date, d.impressions, d.impressions_ctr, d.avg_view_duration_seconds, d.avg_view_percentage, d.traffic_source_share_json
+    FROM video_reporting_daily d
+    LEFT JOIN videos v ON v.video_id = d.video_id
+    WHERE d.channel_id = ?
+      AND d.owner_id = ?
+      AND d.date >= ?
+      AND COALESCE(v.availability_status, 'available') = 'available'
+    ORDER BY d.date DESC, d.video_id ASC
   `).all(channelId, binding.owner_id, startDate) as any[];
 
   const byDate = new Map<string, any[]>();
@@ -499,12 +510,14 @@ router.get('/:id/reporting/videos', (req: Request, res: Response) => {
       d.traffic_source_share_json,
       d.computed_at,
       v.title,
-      v.webpage_url
+      v.webpage_url,
+      v.availability_status
     FROM video_reporting_daily d
     LEFT JOIN videos v ON v.video_id = d.video_id
     WHERE d.channel_id = ?
       AND d.owner_id = ?
       AND d.date >= ?
+      AND COALESCE(v.availability_status, 'available') = 'available'
     ORDER BY d.date DESC, COALESCE(d.impressions, 0) DESC, d.video_id ASC
     LIMIT ?
   `).all(channelId, binding.owner_id, startDate, limit) as any[];

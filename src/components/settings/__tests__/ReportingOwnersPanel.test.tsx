@@ -21,20 +21,16 @@ test('reporting owners panel renders empty state', () => {
       loading={false}
       saving={false}
       onSelectOwner={() => {}}
-      onCreateOwner={() => {}}
-      onUpdateOwner={() => {}}
+      onSaveOwnerModal={() => {}}
       onDeleteOwner={() => {}}
       onProbeOwner={() => {}}
-      onCreateBinding={() => {}}
-      onUpdateBinding={() => {}}
-      onDeleteBinding={() => {}}
-      onSyncBinding={() => {}}
       onLoadOwnerLogs={() => {}}
     />,
   )
 
   assert.match(html, /Reporting Owners/)
   assert.match(html, /尚未配置 Owner/)
+  assert.match(html, /新增 Owner/)
 })
 
 test('reporting owners panel renders owner summary cards', () => {
@@ -60,22 +56,37 @@ test('reporting owners panel renders owner summary cards', () => {
       channels={channels}
       selectedOwnerId="owner-1"
       ownerLogs={[]}
+      probeResults={{
+        'owner-1': {
+          ok: true,
+          proxy: 'socks5://127.0.0.1:1080',
+          proxy_mode: 'socks5',
+          egress_ip: '1.2.3.4',
+          google_oauth_ok: true,
+          reporting_api_ok: true,
+          message: '代理连通成功（socks5://127.0.0.1:1080），出口IP 1.2.3.4',
+        },
+      }}
       loading={false}
       saving={false}
       onSelectOwner={() => {}}
-      onCreateOwner={() => {}}
-      onUpdateOwner={() => {}}
+      onSaveOwnerModal={() => {}}
       onDeleteOwner={() => {}}
       onProbeOwner={() => {}}
-      onCreateBinding={() => {}}
-      onUpdateBinding={() => {}}
-      onDeleteBinding={() => {}}
-      onSyncBinding={() => {}}
       onLoadOwnerLogs={() => {}}
     />,
   )
 
   assert.match(html, /Owner One/)
   assert.match(html, /请求成功率/)
-  assert.match(html, /UC1/)
+  assert.match(html, /编辑/)
+  assert.equal((html.match(/新增 Owner/g) || []).length, 1)
+  assert.match(html, /代理检测正常/)
+  assert.match(html, /socks5/)
+  assert.match(html, /1.2.3.4/)
+  assert.doesNotMatch(html, /reporting-owner-probe-summary/)
+  assert.match(html, /reporting-probe-status/)
+  assert.doesNotMatch(html, /<h3>频道绑定<\/h3>/)
+  assert.doesNotMatch(html, /绑定频道<\/button>/)
+  assert.doesNotMatch(html, /保存 Owner/)
 })

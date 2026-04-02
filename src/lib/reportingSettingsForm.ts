@@ -9,7 +9,6 @@ export type ReportingOwnerFormState = {
   proxyUrl: string
   enabled: boolean
   reportingEnabled: boolean
-  startedAt: string
   showMaskedClientSecret: boolean
   showMaskedRefreshToken: boolean
 }
@@ -28,7 +27,6 @@ export function deriveReportingOwnerFormState(owner?: Partial<ReportingOwner> | 
     proxyUrl: String(owner?.proxy_url || '').trim(),
     enabled: owner?.enabled !== false,
     reportingEnabled: owner?.reporting_enabled !== false,
-    startedAt: String(owner?.started_at || '').trim(),
     showMaskedClientSecret: clientSecret.startsWith('__YT_REPORTING_OWNER_MASKED__:'),
     showMaskedRefreshToken: refreshToken.startsWith('__YT_REPORTING_OWNER_MASKED__:'),
   }
@@ -43,6 +41,5 @@ export function buildReportingOwnerPayload(input: ReportingOwnerPayloadInput) {
     proxy_url: String(input.proxyUrl || '').trim(),
     enabled: !!input.enabled,
     reporting_enabled: !!input.reportingEnabled,
-    started_at: String(input.startedAt || '').trim() || null,
   }
 }

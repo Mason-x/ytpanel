@@ -88,6 +88,40 @@ export function insertReportingRequestLog(input: ReportingRequestLogInput): numb
   return Number(result.lastInsertRowid || 0);
 }
 
+export function updateReportingRequestLog(
+  id: number,
+  patch: {
+    status_code?: number | null;
+    success?: boolean;
+    error_code?: string | null;
+    error_message?: string | null;
+    finished_at?: string | null;
+    duration_ms?: number | null;
+    response_meta_json?: string | null;
+  },
+): void {
+  getDb().prepare(`
+    UPDATE reporting_request_logs
+    SET status_code = ?,
+        success = ?,
+        error_code = ?,
+        error_message = ?,
+        finished_at = ?,
+        duration_ms = ?,
+        response_meta_json = ?
+    WHERE id = ?
+  `).run(
+    patch.status_code ?? null,
+    patch.success ? 1 : 0,
+    patch.error_code ?? null,
+    patch.error_message ?? null,
+    patch.finished_at ?? nowSql(),
+    patch.duration_ms ?? null,
+    patch.response_meta_json ?? '{}',
+    id,
+  );
+}
+
 async function executeJsonRequest(url: URL, proxyUrl: string): Promise<ProbeCallResult> {
   const normalizedProxy = normalizeReportingOwnerProxyUrl(proxyUrl);
 
@@ -183,7 +217,7 @@ export async function probeReportingProxy(
   const ipProbe = options.ipProbe || ((proxyUrl: string) =>
     executeJsonRequest(new URL('https://api.ipify.org?format=json'), proxyUrl));
   const oauthProbe = options.oauthProbe || ((proxyUrl: string) =>
-    executeJsonRequest(new URL('https://oauth2.googleapis.com/tokeninfo?access_token=invalid'), proxyUrl));
+    executeJsonRequest(new URL('https://accounts.google.com/.well-known/openid-configuration'), proxyUrl));
   const reportingProbe = options.reportingProbe || ((proxyUrl: string) =>
     executeJsonRequest(new URL('https://youtubereporting.googleapis.com/$discovery/rest?version=v1'), proxyUrl));
 
@@ -221,15 +255,15 @@ export async function probeReportingProxy(
   const oauthFinishedAt = nowSql();
   insertReportingRequestLog({
     owner_id: ownerId,
-    request_kind: 'token_refresh',
-    request_url: 'https://oauth2.googleapis.com/tokeninfo?access_token=invalid',
+    request_kind: 'oauth_probe',
+    request_url: 'https://accounts.google.com/.well-known/openid-configuration',
     proxy_url_snapshot: normalizedProxy || null,
     status_code: oauthResult.status_code,
     success: oauthResult.ok,
     started_at: oauthStartedAt,
     finished_at: oauthFinishedAt,
     response_meta_json: JSON.stringify(oauthResult.payload || {}),
-    error_message: oauthResult.ok ? null : 'google_oauth_probe_failed',
+    error_message: oauthResult.ok ? null : 'oauth_probe_failed',
   });
 
   const reportingStartedAt = nowSql();
@@ -237,7 +271,7 @@ export async function probeReportingProxy(
   const reportingFinishedAt = nowSql();
   insertReportingRequestLog({
     owner_id: ownerId,
-    request_kind: 'reporting_reports_list',
+    request_kind: 'reporting_api_probe',
     request_url: 'https://youtubereporting.googleapis.com/$discovery/rest?version=v1',
     proxy_url_snapshot: normalizedProxy || null,
     status_code: reportingResult.status_code,

@@ -115,6 +115,22 @@ test('probeReportingProxy returns egress ip and probe booleans with stubbed chec
     assert.equal(result.egress_ip, '1.2.3.4');
     assert.equal(result.google_oauth_ok, true);
     assert.equal(result.reporting_api_ok, true);
+
+    const rows = getDb().prepare(`
+      SELECT request_kind, status_code
+      FROM reporting_request_logs
+      WHERE owner_id = 'owner-1'
+      ORDER BY id ASC
+    `).all() as Array<{ request_kind: string; status_code: number }>;
+
+    assert.deepEqual(
+      rows.map((row) => row.request_kind),
+      ['proxy_probe', 'oauth_probe', 'reporting_api_probe'],
+    );
+    assert.deepEqual(
+      rows.map((row) => row.status_code),
+      [200, 200, 200],
+    );
   } finally {
     fixture.cleanup();
   }

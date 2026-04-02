@@ -6,9 +6,9 @@ test('parseYoutubeReportingCsv reads reach report rows', () => {
   const rows = parseYoutubeReportingCsv({
     reportTypeId: 'channel_reach_basic_a1',
     csvText: [
-      'day,video_id,impressions,impressions_ctr',
-      '2026-04-02,vid-1,100,0.12',
-      '2026-04-02,vid-2,50,0.05',
+      'date,channel_id,video_id,video_thumbnail_impressions,video_thumbnail_impressions_ctr',
+      '20260402,UC1,vid-1,100,0.12',
+      '20260402,UC1,vid-2,50,0.05',
     ].join('\n'),
   });
 
@@ -25,8 +25,8 @@ test('parseYoutubeReportingCsv reads basic report rows', () => {
   const rows = parseYoutubeReportingCsv({
     reportTypeId: 'channel_basic_a3',
     csvText: [
-      'day,video_id,average_view_duration_seconds,average_view_percentage',
-      '2026-04-02,vid-1,35.5,0.42',
+      'date,channel_id,video_id,average_view_duration_seconds,average_view_duration_percentage',
+      '20260402,UC1,vid-1,35.5,0.42',
     ].join('\n'),
   });
 
@@ -43,9 +43,9 @@ test('parseYoutubeReportingCsv reads traffic source rows', () => {
   const rows = parseYoutubeReportingCsv({
     reportTypeId: 'channel_traffic_source_a3',
     csvText: [
-      'day,video_id,traffic_source_type,views',
-      '2026-04-02,vid-1,YT_SEARCH,70',
-      '2026-04-02,vid-1,SUGGESTED_VIDEO,30',
+      'date,channel_id,video_id,traffic_source_type,views',
+      '20260402,UC1,vid-1,YT_SEARCH,70',
+      '20260402,UC1,vid-1,SUGGESTED_VIDEO,30',
     ].join('\n'),
   });
 

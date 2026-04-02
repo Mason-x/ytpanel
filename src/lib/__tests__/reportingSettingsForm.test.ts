@@ -15,12 +15,11 @@ test('deriveReportingOwnerFormState exposes masked secret state', () => {
     proxy_url: 'http://127.0.0.1:8080/',
     enabled: true,
     reporting_enabled: true,
-    started_at: '2026-04-02',
   })
 
   assert.equal(state.showMaskedClientSecret, true)
   assert.equal(state.showMaskedRefreshToken, true)
-  assert.equal(state.startedAt, '2026-04-02')
+  assert.equal(Object.prototype.hasOwnProperty.call(state, 'startedAt'), false)
 })
 
 test('buildReportingOwnerPayload preserves masked secrets until edited', () => {
@@ -33,7 +32,6 @@ test('buildReportingOwnerPayload preserves masked secrets until edited', () => {
     proxyUrl: 'socks5://127.0.0.1:1080',
     enabled: true,
     reportingEnabled: true,
-    startedAt: '2026-04-02',
     showMaskedClientSecret: true,
     showMaskedRefreshToken: true,
   })
@@ -41,4 +39,5 @@ test('buildReportingOwnerPayload preserves masked secrets until edited', () => {
   assert.equal(payload.client_secret, '__YT_REPORTING_OWNER_MASKED__:owner-1:client_secret')
   assert.equal(payload.refresh_token, '__YT_REPORTING_OWNER_MASKED__:owner-1:refresh_token')
   assert.equal(payload.proxy_url, 'socks5://127.0.0.1:1080')
+  assert.equal(Object.prototype.hasOwnProperty.call(payload, 'started_at'), false)
 })

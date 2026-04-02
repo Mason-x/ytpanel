@@ -17,7 +17,7 @@ export default function OwnerRequestLogPanel({ logs }: Props) {
       {logs.length === 0 ? (
         <div className="empty-state">暂无请求日志。</div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div className="reporting-log-scroll">
           <table className="table">
             <thead>
               <tr>

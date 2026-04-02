@@ -22,7 +22,6 @@ function createEmptyState(): ReportingOwnerFormState {
     proxy_url: '',
     enabled: true,
     reporting_enabled: true,
-    started_at: '',
   })
 }
 
@@ -40,10 +39,6 @@ export default function OwnerEditorModal({ owner, saving, onSubmit }: Props) {
           <label className="form-label">Owner 名称</label>
           <input className="input" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Owner A" />
         </div>
-        <div className="form-group">
-          <label className="form-label">启用日期</label>
-          <input className="input" type="date" value={form.startedAt} onChange={(event) => setForm((current) => ({ ...current, startedAt: event.target.value }))} />
-        </div>
       </div>
 
       <div className="settings-inline-grid">
@@ -53,7 +48,8 @@ export default function OwnerEditorModal({ owner, saving, onSubmit }: Props) {
         </div>
         <div className="form-group">
           <label className="form-label">代理 URL</label>
-          <input className="input" value={form.proxyUrl} onChange={(event) => setForm((current) => ({ ...current, proxyUrl: event.target.value }))} placeholder="http://127.0.0.1:8080" />
+          <input className="input" value={form.proxyUrl} onChange={(event) => setForm((current) => ({ ...current, proxyUrl: event.target.value }))} placeholder="http://127.0.0.1:8080 或 socks5://127.0.0.1:1080" />
+          <span className="form-help">支持 `http`、`https`、`socks`、`socks5` 代理。</span>
         </div>
       </div>
 

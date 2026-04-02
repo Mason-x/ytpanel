@@ -87,6 +87,16 @@ export interface ReportingOwnerUsage {
   avg_duration_ms_24h?: number | null
 }
 
+export interface ReportingOwnerProbeResult {
+  ok: boolean
+  proxy: string
+  proxy_mode: 'direct' | 'http' | 'https' | 'socks5'
+  egress_ip: string
+  google_oauth_ok: boolean
+  reporting_api_ok: boolean
+  message: string
+}
+
 export interface ChannelReportingSummary {
   enabled: boolean
   owner_id?: string | null

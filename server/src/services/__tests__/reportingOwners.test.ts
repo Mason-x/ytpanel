@@ -193,3 +193,28 @@ test('createReportingBinding rejects a second owner for the same channel', () =>
     fixture.cleanup();
   }
 });
+
+test('createReportingBinding defaults started_at to today when omitted', () => {
+  const fixture = initTestDb();
+  try {
+    const owner = createReportingOwner({
+      name: 'Owner One',
+      client_id: 'client-id-1',
+      client_secret: 'client-secret-1',
+      refresh_token: 'refresh-token-1',
+    });
+
+    const before = new Date().toISOString().slice(0, 10);
+    const binding = createReportingBinding(owner.owner_id, {
+      channel_id: 'UC_TEST_CHANNEL_2',
+      enabled: true,
+      reporting_enabled: true,
+    });
+    const after = new Date().toISOString().slice(0, 10);
+
+    assert.match(binding.started_at, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(binding.started_at === before || binding.started_at === after);
+  } finally {
+    fixture.cleanup();
+  }
+});

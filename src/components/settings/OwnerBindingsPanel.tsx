@@ -23,7 +23,6 @@ export default function OwnerBindingsPanel({
   onSyncBinding,
 }: Props) {
   const [channelId, setChannelId] = useState('')
-  const [startedAt, setStartedAt] = useState(new Date().toISOString().slice(0, 10))
 
   const boundChannelIds = useMemo(() => new Set(bindings.map((binding) => binding.channel_id)), [bindings])
 
@@ -48,10 +47,6 @@ export default function OwnerBindingsPanel({
             ))}
           </select>
         </div>
-        <div className="form-group">
-          <label className="form-label">启用日期</label>
-          <input className="input" type="date" value={startedAt} onChange={(event) => setStartedAt(event.target.value)} />
-        </div>
       </div>
 
       <div>
@@ -61,7 +56,6 @@ export default function OwnerBindingsPanel({
           disabled={saving || !channelId}
           onClick={() => void onCreateBinding(ownerId, {
             channel_id: channelId,
-            started_at: startedAt,
             enabled: true,
             reporting_enabled: true,
           })}
@@ -79,7 +73,6 @@ export default function OwnerBindingsPanel({
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontWeight: 700 }}>{binding.channel_id}</div>
-                  <div className="form-help">{`启用日期：${binding.started_at}`}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button

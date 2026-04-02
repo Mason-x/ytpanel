@@ -8,12 +8,12 @@ test('reporting panel renders disabled empty state', () => {
     <ReportingPanel
       enabled={false}
       ownerName={null}
-      startedAt={null}
       latestImportedAt={null}
       summary={null}
       dailyRows={[]}
       videos={[]}
       loading={false}
+      syncing={false}
       onSync={() => {}}
     />,
   )
@@ -26,7 +26,6 @@ test('reporting panel renders reporting kpis and traffic source section', () => 
     <ReportingPanel
       enabled
       ownerName="Owner One"
-      startedAt="2026-04-02"
       latestImportedAt="2026-04-03 10:00:00"
       summary={{
         enabled: true,
@@ -63,6 +62,7 @@ test('reporting panel renders reporting kpis and traffic source section', () => 
         computed_at: '2026-04-03 10:00:00',
       }]}
       loading={false}
+      syncing
       onSync={() => {}}
     />,
   )
@@ -71,4 +71,6 @@ test('reporting panel renders reporting kpis and traffic source section', () => 
   assert.match(html, /平均观看时长/)
   assert.match(html, /流量来源占比/)
   assert.match(html, /Video One/)
+  assert.match(html, /同步中/)
+  assert.match(html, /disabled/)
 })
