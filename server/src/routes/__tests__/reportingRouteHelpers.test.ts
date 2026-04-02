@@ -6,6 +6,10 @@ import path from 'path';
 import { initDb, getDb } from '../../db.js';
 import { createReportingBinding, createReportingOwner } from '../../services/reportingOwners.js';
 import {
+  buildReportingOwnerUsageSummary,
+  serializeReportingOwnerResponse,
+} from '../reporting.js';
+import {
   enqueueDailyReportingSyncs,
   enqueueReportingSyncForBinding,
 } from '../../services/youtubeReportingSync.js';
@@ -123,4 +127,71 @@ test('enqueueDailyReportingSyncs only queues enabled owner bindings', () => {
   } finally {
     fixture.cleanup();
   }
+});
+
+test('serializeReportingOwnerResponse includes bindings and usage payloads', () => {
+  const response = serializeReportingOwnerResponse(
+    {
+      owner_id: 'owner-1',
+      name: 'Owner One',
+      client_id: 'client-id-1',
+      client_secret: '__YT_REPORTING_OWNER_MASKED__:owner-1:client_secret',
+      refresh_token: '__YT_REPORTING_OWNER_MASKED__:owner-1:refresh_token',
+      proxy_url: 'http://127.0.0.1:8080/',
+      enabled: 1,
+      reporting_enabled: 1,
+      started_at: '2026-04-02',
+      last_token_refresh_at: null,
+      last_sync_at: null,
+      last_error: null,
+      created_at: '2026-04-02 00:00:00',
+      updated_at: '2026-04-02 00:00:00',
+    },
+    [
+      {
+        id: 'binding-1',
+        owner_id: 'owner-1',
+        channel_id: 'UC_SYNC_1',
+        enabled: 1,
+        reporting_enabled: 1,
+        started_at: '2026-04-02',
+        created_at: '2026-04-02 00:00:00',
+        updated_at: '2026-04-02 00:00:00',
+      },
+    ],
+    {
+      owner_id: 'owner-1',
+      request_count_24h: 4,
+      success_count_24h: 3,
+      failure_count_24h: 1,
+      success_rate_24h: 0.75,
+      download_count_24h: 2,
+      last_token_refresh_at: null,
+      last_sync_at: null,
+      last_error: null,
+      avg_duration_ms_24h: 200,
+    },
+  );
+
+  assert.equal(response.owner_id, 'owner-1');
+  assert.equal(response.bindings.length, 1);
+  assert.equal(response.usage?.request_count_24h, 4);
+});
+
+test('buildReportingOwnerUsageSummary computes success rate from log counts', () => {
+  const usage = buildReportingOwnerUsageSummary({
+    owner_id: 'owner-1',
+    request_count_24h: 5,
+    success_count_24h: 4,
+    failure_count_24h: 1,
+    download_count_24h: 2,
+    avg_duration_ms_24h: 180,
+    last_token_refresh_at: null,
+    last_sync_at: null,
+    last_error: null,
+  });
+
+  assert.equal(usage.owner_id, 'owner-1');
+  assert.equal(usage.success_rate_24h, 0.8);
+  assert.equal(usage.download_count_24h, 2);
 });

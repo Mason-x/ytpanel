@@ -19,6 +19,7 @@ import researchRoutes from './routes/research.js';
 import hitsRoutes from './routes/hits.js';
 import dashboardRoutes from './routes/dashboard.js';
 import agentRoutes from './routes/agent.js';
+import reportingRoutes from './routes/reporting.js';
 
 const PORT = parseInt(process.env.PORT || '3457', 10);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -71,6 +72,7 @@ app.use('/api/research', researchRoutes);
 app.use('/api/hits', hitsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/agent', agentRoutes);
+app.use('/api/reporting', reportingRoutes);
 
 const frontendDist = path.join(process.cwd(), 'dist');
 app.use(express.static(frontendDist));
@@ -101,4 +103,3 @@ setTimeout(() => {
 }, 1000);
 
 export default app;
-
