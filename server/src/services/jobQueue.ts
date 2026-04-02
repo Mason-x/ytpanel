@@ -12,6 +12,7 @@ import { fetchXhsSpiderAccountFeed } from './xhsSpider.js';
 import { fetchDouyinChannelCardStatsByPlaywright } from './douyinPlaywright.js';
 import { getPlaywrightHeadlessEnabled, getPlaywrightSessionEnabled } from './playwrightSession.js';
 import { writeChannelViewGrowthCache } from './channelMetrics.js';
+import { computeEffectiveChannelVideoCount, isSuspiciousYoutubeVideoCount } from './channelVideoCount.js';
 import { autoCollectYoutubeHitVideos } from '../routes/hits.js';
 import { hasUsableYoutubeCookiePoolItems, isYoutubeCookiePoolEnabled } from './youtubeCookiePool.js';
 import { syncReportingBinding } from './youtubeReportingSync.js';
@@ -279,18 +280,6 @@ function getRecentVideoFetchLimit(): number {
   const raw = parseInt(getSetting('recent_video_fetch_limit') || '50', 10);
   if (!Number.isFinite(raw) || raw <= 0) return 50;
   return Math.max(1, Math.min(500, raw));
-}
-
-function hasSuspiciousYoutubeVideoCount(channel: any): boolean {
-  if (normalizeChannelPlatform(channel?.platform) !== 'youtube') return false;
-  const videoCount = toNullableInt(channel?.video_count);
-  if (videoCount == null || videoCount <= 0) return false;
-  const fetchLimit = getRecentVideoFetchLimit();
-  // A common failure mode: fallback metadata/aggregation writes the capped fetch count
-  // instead of channel total video count (e.g. exactly 200 when fetch limit is 200).
-  if (videoCount === fetchLimit) return true;
-  if (videoCount === 200) return true;
-  return false;
 }
 
 function getYoutubeCookiePoolSwitchOffWarning(): string | null {
@@ -2553,7 +2542,20 @@ function shouldFetchChannelSnapshotByApi(channel: any): { shouldFetch: boolean; 
   if (hasChannelMetadataGap(channel)) {
     return { shouldFetch: true, reason: 'channel_metadata_missing' };
   }
-  if (hasSuspiciousYoutubeVideoCount(channel)) {
+  const unavailableVideoStats = getDb().prepare(`
+    SELECT
+      SUM(CASE WHEN lower(COALESCE(availability_status, 'available')) = 'available' THEN 1 ELSE 0 END) AS available_count,
+      SUM(CASE WHEN lower(COALESCE(availability_status, 'available')) <> 'available' THEN 1 ELSE 0 END) AS unavailable_count
+    FROM videos
+    WHERE channel_id = ?
+  `).get(String(channel?.channel_id || '').trim()) as any;
+  if (isSuspiciousYoutubeVideoCount({
+    platform: normalizeChannelPlatform(channel?.platform),
+    currentVideoCount: toNullableInt(channel?.video_count),
+    availableTrackedVideoCount: Number(unavailableVideoStats?.available_count || 0),
+    unavailableTrackedVideoCount: Number(unavailableVideoStats?.unavailable_count || 0),
+    fetchLimit: getRecentVideoFetchLimit(),
+  })) {
     return { shouldFetch: true, reason: 'channel_video_count_suspected_capped' };
   }
 
@@ -5642,6 +5644,8 @@ class JobQueue {
       const stats = db.prepare(`
         SELECT
           count(*) as count,
+          SUM(CASE WHEN lower(COALESCE(availability_status, 'available')) = 'available' THEN 1 ELSE 0 END) as available_count,
+          SUM(CASE WHEN lower(COALESCE(availability_status, 'available')) <> 'available' THEN 1 ELSE 0 END) as unavailable_count,
           sum(CASE WHEN view_count > 0 THEN view_count ELSE 0 END) as total_views_positive,
           sum(CASE WHEN view_count IS NOT NULL AND view_count > 0 THEN 1 ELSE 0 END) as view_samples
         FROM videos
@@ -5653,18 +5657,18 @@ class JobQueue {
           ? Number(stats.total_views_positive || 0)
           : null;
         const totalVideos = Number(stats.count || 0);
-        const aggregateVideoCount = (
-          platform === 'douyin' && douyinReportedVideoCount != null
-            ? Math.max(totalVideos, Number(douyinReportedVideoCount || 0))
-            : totalVideos
-        );
+        const availableTrackedVideoCount = Number(stats.available_count || 0);
+        const unavailableTrackedVideoCount = Number(stats.unavailable_count || 0);
         const channelSnapshotBeforeUpdate = db.prepare("SELECT subscriber_count, video_count FROM channels WHERE channel_id = ?").get(channelId) as any;
         const currentChannelVideoCount = toNullableInt(channelSnapshotBeforeUpdate?.video_count);
-        // Keep channel-level "total video count" from metadata/API when available.
-        // Aggregated table count is only used as fallback or lower-bound, not as overwrite.
-        const effectiveVideoCount = currentChannelVideoCount != null
-          ? Math.max(currentChannelVideoCount, aggregateVideoCount)
-          : aggregateVideoCount;
+        const effectiveVideoCount = computeEffectiveChannelVideoCount({
+          platform,
+          currentVideoCount: currentChannelVideoCount,
+          trackedVideoCount: totalVideos,
+          availableTrackedVideoCount,
+          unavailableTrackedVideoCount,
+          reportedVideoCount: douyinReportedVideoCount,
+        });
 
         db.prepare("UPDATE channels SET video_count = ?, view_count = COALESCE(?, view_count) WHERE channel_id = ?")
           .run(effectiveVideoCount, totalViews, channelId);
@@ -5682,7 +5686,7 @@ class JobQueue {
 
         logEvent(
           'info',
-          `Synched aggregates: channel videos ${effectiveVideoCount} (tracked ${aggregateVideoCount}), ${totalViews == null ? 'N/A' : totalViews} total views`,
+          `Synched aggregates: channel videos ${effectiveVideoCount} (tracked ${totalVideos}, available ${availableTrackedVideoCount}), ${totalViews == null ? 'N/A' : totalViews} total views`,
         );
       }
     } catch (e: any) {

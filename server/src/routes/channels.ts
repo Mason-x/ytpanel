@@ -10,6 +10,7 @@ import {
   toChannelReportRowFromDb,
 } from '../services/youtubeApi.js';
 import { buildChannelViewGrowthData, parseCachedChannelViewGrowth } from '../services/channelMetrics.js';
+import { isSuspiciousYoutubeVideoCount } from '../services/channelVideoCount.js';
 import * as ytdlp from '../services/ytdlp.js';
 
 const router = Router();
@@ -506,16 +507,6 @@ function getRecentVideoFetchLimit(): number {
   return Math.max(1, Math.min(500, raw));
 }
 
-function hasSuspiciousYoutubeVideoCount(channel: any): boolean {
-  if (normalizePlatform(channel?.platform) !== 'youtube') return false;
-  const videoCount = toNullableInt(channel?.video_count);
-  if (videoCount == null || videoCount <= 0) return false;
-  const fetchLimit = getRecentVideoFetchLimit();
-  if (videoCount === fetchLimit) return true;
-  if (videoCount === 200) return true;
-  return false;
-}
-
 function shouldFetchChannelApiForRefresh(channel: any): { shouldFetch: boolean; reason: string } {
   if (normalizePlatform(channel?.platform) !== 'youtube') return { shouldFetch: false, reason: 'platform_not_youtube' };
   if (getSetting('channel_api_enabled') === 'false') return { shouldFetch: false, reason: 'channel_api_disabled' };
@@ -525,7 +516,21 @@ function shouldFetchChannelApiForRefresh(channel: any): { shouldFetch: boolean; 
   );
   if (!hasAnyApiKey) return { shouldFetch: false, reason: 'youtube_api_key_missing' };
   if (hasChannelMetadataGap(channel)) return { shouldFetch: true, reason: 'channel_metadata_missing' };
-  if (hasSuspiciousYoutubeVideoCount(channel)) return { shouldFetch: true, reason: 'channel_video_count_suspected_capped' };
+  const db = getDb();
+  const unavailableVideoStats = db.prepare(`
+    SELECT
+      SUM(CASE WHEN lower(COALESCE(availability_status, 'available')) = 'available' THEN 1 ELSE 0 END) AS available_count,
+      SUM(CASE WHEN lower(COALESCE(availability_status, 'available')) <> 'available' THEN 1 ELSE 0 END) AS unavailable_count
+    FROM videos
+    WHERE channel_id = ?
+  `).get(String(channel?.channel_id || '').trim()) as any;
+  if (isSuspiciousYoutubeVideoCount({
+    platform: normalizePlatform(channel?.platform),
+    currentVideoCount: toNullableInt(channel?.video_count),
+    availableTrackedVideoCount: Number(unavailableVideoStats?.available_count || 0),
+    unavailableTrackedVideoCount: Number(unavailableVideoStats?.unavailable_count || 0),
+    fetchLimit: getRecentVideoFetchLimit(),
+  })) return { shouldFetch: true, reason: 'channel_video_count_suspected_capped' };
 
   const lastApiSyncEpoch = toEpochFromSqliteTimestamp(channel.api_last_sync_at);
   if (lastApiSyncEpoch == null) return { shouldFetch: true, reason: 'channel_api_never_synced' };
@@ -1817,5 +1822,4 @@ router.post('/:id/export-metadata', (req: Request, res: Response) => {
 });
 
 export default router;
-
 
