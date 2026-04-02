@@ -4,9 +4,16 @@ import type {
   ApiChannel,
   ApiJob,
   ApiVideo,
+  ChannelReportingDailyRow,
+  ChannelReportingSummary,
+  ChannelReportingVideoRow,
   AppSettingsResponse,
   DashboardSummary,
   DashboardTask,
+  ReportingOwner,
+  ReportingOwnerBinding,
+  ReportingOwnerUsage,
+  ReportingRequestLog,
   YoutubeApiUsage,
 } from '../types'
 
@@ -56,6 +63,29 @@ export const api = {
   getYoutubeApiUsage: () => request<YoutubeApiUsage>('/settings/youtube-api-usage'),
   runDailySync: () => request<{ job_id: string; status: string; message?: string }>('/sync/daily', { method: 'POST' }),
 
+  getReportingOwners: () =>
+    request<{ data: Array<ReportingOwner & { bindings?: ReportingOwnerBinding[]; usage?: ReportingOwnerUsage | null }> }>('/reporting/owners'),
+  createReportingOwner: (payload: Record<string, unknown>) =>
+    request<ReportingOwner>('/reporting/owners', { method: 'POST', body: JSON.stringify(payload) }),
+  updateReportingOwner: (ownerId: string, payload: Record<string, unknown>) =>
+    request<ReportingOwner>(`/reporting/owners/${encodeURIComponent(ownerId)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteReportingOwner: (ownerId: string) =>
+    request<{ success?: boolean }>(`/reporting/owners/${encodeURIComponent(ownerId)}`, { method: 'DELETE' }),
+  testReportingOwnerProxy: (ownerId: string, payload?: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/reporting/owners/${encodeURIComponent(ownerId)}/proxy-test`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  getReportingOwnerLogs: (ownerId: string, params?: Record<string, string | number | null | undefined>) =>
+    request<{ data: ReportingRequestLog[] }>(withQuery(`/reporting/owners/${encodeURIComponent(ownerId)}/logs`, params)),
+  getReportingOwnerUsage: (ownerId: string) =>
+    request<ReportingOwnerUsage>(`/reporting/owners/${encodeURIComponent(ownerId)}/usage`),
+  createReportingBinding: (ownerId: string, payload: Record<string, unknown>) =>
+    request<ReportingOwnerBinding>(`/reporting/owners/${encodeURIComponent(ownerId)}/bindings`, { method: 'POST', body: JSON.stringify(payload) }),
+  updateReportingBinding: (bindingId: string, payload: Record<string, unknown>) =>
+    request<ReportingOwnerBinding>(`/reporting/bindings/${encodeURIComponent(bindingId)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteReportingBinding: (bindingId: string) =>
+    request<{ success?: boolean }>(`/reporting/bindings/${encodeURIComponent(bindingId)}`, { method: 'DELETE' }),
+  syncReportingBinding: (bindingId: string) =>
+    request<{ job_id: string; status: string }>(`/reporting/bindings/${encodeURIComponent(bindingId)}/sync`, { method: 'POST' }),
+
   getChannels: (params?: Record<string, string | number | null | undefined>) =>
     request<ApiListResponse<ApiChannel>>(withQuery('/channels', params)),
   getChannel: (channelId: string) => request<ApiChannel>(`/channels/${encodeURIComponent(channelId)}`),
@@ -84,6 +114,14 @@ export const api = {
     request<AnalyticsKpi>(withQuery(`/channels/${encodeURIComponent(channelId)}/analytics/kpi`, { range })),
   getDailyTable: (channelId: string, params?: Record<string, string | number | null | undefined>) =>
     request<ApiListResponse<AnalyticsDailyRow>>(withQuery(`/channels/${encodeURIComponent(channelId)}/analytics/daily-table`, params)),
+  getChannelReportingSummary: (channelId: string) =>
+    request<ChannelReportingSummary>(`/channels/${encodeURIComponent(channelId)}/reporting/summary`),
+  getChannelReportingDaily: (channelId: string, params?: Record<string, string | number | null | undefined>) =>
+    request<ApiListResponse<ChannelReportingDailyRow>>(withQuery(`/channels/${encodeURIComponent(channelId)}/reporting/daily`, params)),
+  getChannelReportingVideos: (channelId: string, params?: Record<string, string | number | null | undefined>) =>
+    request<ApiListResponse<ChannelReportingVideoRow>>(withQuery(`/channels/${encodeURIComponent(channelId)}/reporting/videos`, params)),
+  syncChannelReporting: (channelId: string) =>
+    request<{ job_id: string; status: string }>(`/channels/${encodeURIComponent(channelId)}/reporting/sync`, { method: 'POST' }),
 
   getJobs: (params?: Record<string, string | number | null | undefined>) =>
     request<ApiListResponse<ApiJob>>(withQuery('/jobs', params)),
