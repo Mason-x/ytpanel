@@ -14,6 +14,7 @@ import { getPlaywrightHeadlessEnabled, getPlaywrightSessionEnabled } from './pla
 import { writeChannelViewGrowthCache } from './channelMetrics.js';
 import { autoCollectYoutubeHitVideos } from '../routes/hits.js';
 import { hasUsableYoutubeCookiePoolItems, isYoutubeCookiePoolEnabled } from './youtubeCookiePool.js';
+import { syncReportingBinding } from './youtubeReportingSync.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -2583,7 +2584,7 @@ class JobQueue {
   }
 
   private getJobLane(type: string): 'sync' | 'download' | 'other' {
-    if (['sync_channel', 'daily_sync', 'availability_check', 'metadata_repair'].includes(type)) return 'sync';
+    if (['sync_channel', 'sync_reporting_channel', 'daily_sync', 'availability_check', 'metadata_repair'].includes(type)) return 'sync';
     if (
       [
         'download_meta',
@@ -2636,8 +2637,9 @@ class JobQueue {
           ORDER BY
             CASE type
               WHEN 'sync_channel' THEN 0
-              WHEN 'daily_sync' THEN 1
-              ELSE 2
+              WHEN 'sync_reporting_channel' THEN 1
+              WHEN 'daily_sync' THEN 2
+              ELSE 3
             END ASC,
             created_at ASC
           LIMIT 50
@@ -2752,6 +2754,7 @@ class JobQueue {
   private getHandler(type: string): JobHandler | null {
     switch (type) {
       case 'sync_channel': return this.handleSyncChannel.bind(this);
+      case 'sync_reporting_channel': return this.handleSyncReportingChannel.bind(this);
       case 'channel_meta_retry_audit': return this.handleChannelMetaRetryAudit.bind(this);
       case 'daily_sync': return this.handleDailySync.bind(this);
       case 'availability_check': return this.handleAvailabilityCheck.bind(this);
@@ -5754,6 +5757,23 @@ class JobQueue {
     }
 
     logEvent('info', `Daily sync complete. Success: ${okCount}, Failed: ${failCount}`);
+    updateProgress(100);
+  }
+
+  private async handleSyncReportingChannel(job: any, logEvent: (l: string, m: string) => void, updateProgress: (p: number) => void): Promise<void> {
+    const bindingId = String(job?.payload?.binding_id || '').trim();
+    if (!bindingId) {
+      throw new Error('binding_id is required');
+    }
+
+    logEvent('info', `Starting reporting sync for binding ${bindingId}`);
+    updateProgress(10);
+    const result = await syncReportingBinding(bindingId);
+    updateProgress(90);
+    logEvent(
+      'info',
+      `Reporting sync complete for ${result.channel_id}: downloaded ${result.downloaded_reports} reports, derived ${result.derived_rows} rows`,
+    );
     updateProgress(100);
   }
 

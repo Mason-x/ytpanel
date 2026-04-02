@@ -76,6 +76,26 @@ async function requestText(
   }
 }
 
+export async function reportingAuthorizedTextRequest(
+  owner: ReportingOwnerRow,
+  url: string,
+  options: ReportingClientRequestOptions = {},
+  dependencies: ReportingClientDependencies = {},
+): Promise<{ status: number; body: string }> {
+  const token = await refreshReportingAccessToken(owner, dependencies);
+  return requestText(
+    url,
+    String(owner.proxy_url || '').trim(),
+    {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `${token.token_type} ${token.access_token}`,
+      },
+    },
+  );
+}
+
 export async function refreshReportingAccessToken(
   owner: ReportingOwnerRow,
   dependencies: ReportingClientDependencies = {},
@@ -134,18 +154,7 @@ export async function reportingAuthorizedJsonRequest(
   options: ReportingClientRequestOptions = {},
   dependencies: ReportingClientDependencies = {},
 ): Promise<{ status: number; payload: any }> {
-  const token = await refreshReportingAccessToken(owner, dependencies);
-  const response = await requestText(
-    url,
-    String(owner.proxy_url || '').trim(),
-    {
-      ...options,
-      headers: {
-        ...(options.headers || {}),
-        Authorization: `${token.token_type} ${token.access_token}`,
-      },
-    },
-  );
+  const response = await reportingAuthorizedTextRequest(owner, url, options, dependencies);
   try {
     return {
       status: response.status,

@@ -2,6 +2,7 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb, getSetting } from '../db.js';
 import { getJobQueue } from './jobQueue.js';
+import { enqueueDailyReportingSyncs } from './youtubeReportingSync.js';
 
 let dailySyncTask: ScheduledTask | null = null;
 
@@ -25,6 +26,11 @@ export function enqueueDailySyncJob(trigger: 'manual' | 'cron' = 'manual') {
     INSERT INTO jobs (job_id, type, payload_json, status)
     VALUES (?, 'daily_sync', ?, 'queued')
   `).run(jobId, JSON.stringify({ trigger }));
+  try {
+    enqueueDailyReportingSyncs(trigger);
+  } catch (error: any) {
+    console.error(`[REPORTING] Failed to enqueue reporting syncs: ${String(error?.message || error || 'unknown')}`);
+  }
   getJobQueue().processNext();
   return { job_id: jobId, status: 'queued' as const };
 }
